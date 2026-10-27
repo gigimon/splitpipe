@@ -1,0 +1,167 @@
+name: SplitPipe
+options:
+  bundleIdPrefix: dev.splitpipe
+  deploymentTarget:
+    macOS: "26.0"
+  createIntermediateGroups: true
+  developmentLanguage: ru
+packages:
+  KeyboardShortcuts:
+    url: https://github.com/sindresorhus/KeyboardShortcuts
+    from: 2.0.0
+settings:
+  base:
+    DEVELOPMENT_TEAM: BL65NHTRYD
+    CODE_SIGN_STYLE: Automatic
+    SWIFT_VERSION: "5.0"
+    MARKETING_VERSION: "0.1.0"
+    CURRENT_PROJECT_VERSION: "1"
+    EXTENSION_VERSION: "1"
+    ENABLE_HARDENED_RUNTIME: YES
+targets:
+  SplitPipe:
+    type: application
+    platform: macOS
+    sources:
+      - SplitPipe
+      - Shared
+      - path: Widgets/WidgetState.swift
+      - path: Launchd/dev.splitpipe.helper.plist
+        buildPhase:
+          copyFiles:
+            destination: wrapper
+            subpath: Contents/Library/LaunchDaemons
+    info:
+      path: SplitPipe/Info.plist
+      properties:
+        CFBundleDisplayName: SplitPipe
+        CFBundleDevelopmentRegion: en
+        CFBundleLocalizations: [en, ru]
+        CFBundlePackageType: APPL
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        LSApplicationCategoryType: public.app-category.utilities
+        SPAppGroup: $(TeamIdentifierPrefix)dev.splitpipe
+        CFBundleURLTypes:
+          - CFBundleURLName: dev.splitpipe.app
+            CFBundleURLSchemes: [splitpipe]
+    scheme: {}
+    entitlements:
+      path: SplitPipe/SplitPipe.entitlements
+      properties:
+        com.apple.developer.networking.networkextension:
+          - app-proxy-provider
+        com.apple.developer.system-extension.install: true
+        com.apple.security.application-groups:
+          - $(TeamIdentifierPrefix)dev.splitpipe
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: dev.splitpipe.app
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        SWIFT_EMIT_LOC_STRINGS: YES
+        LOCALIZATION_PREFERS_STRING_CATALOGS: YES
+    dependencies:
+      - package: KeyboardShortcuts
+      - target: SplitPipeWidgets
+        embed: true
+      - target: SplitPipeProxy
+        embed: true
+      - target: SplitPipeHelper
+        embed: true
+        copy:
+          destination: executables
+  SplitPipeWidgets:
+    type: app-extension
+    platform: macOS
+    sources:
+      - Widgets
+      - path: SplitPipe/Localizable.xcstrings
+    info:
+      path: Widgets/Info.plist
+      properties:
+        CFBundleDisplayName: SplitPipe
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        SPAppGroup: $(TeamIdentifierPrefix)dev.splitpipe
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.widgetkit-extension
+    entitlements:
+      path: Widgets/SplitPipeWidgets.entitlements
+      properties:
+        com.apple.security.app-sandbox: true
+        com.apple.security.application-groups:
+          - $(TeamIdentifierPrefix)dev.splitpipe
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: dev.splitpipe.app.widgets
+        SKIP_INSTALL: YES
+        SWIFT_EMIT_LOC_STRINGS: YES
+        LOCALIZATION_PREFERS_STRING_CATALOGS: YES
+  SplitPipeTests:
+    type: bundle.unit-test
+    platform: macOS
+    sources:
+      - Tests
+      - Shared
+      # Pure app logic without `AppModel`.
+      - path: SplitPipe/EventLog.swift
+      - path: SplitPipe/URLCommand.swift
+      - path: SplitPipe/TemporaryRouteTypes.swift
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: dev.splitpipe.tests
+        GENERATE_INFOPLIST_FILE: YES
+        CODE_SIGN_STYLE: Manual
+        CODE_SIGN_IDENTITY: "-"
+        DEVELOPMENT_TEAM: ""
+        ENABLE_HARDENED_RUNTIME: NO
+    scheme:
+      testTargets:
+        - SplitPipeTests
+  SplitPipeHelper:
+    type: tool
+    platform: macOS
+    sources:
+      - SplitPipeHelper
+      - Shared
+    settings:
+      base:
+        PRODUCT_NAME: dev.splitpipe.helper
+        PRODUCT_BUNDLE_IDENTIFIER: dev.splitpipe.helper
+        INFOPLIST_FILE: SplitPipeHelper/Info.plist
+        CREATE_INFOPLIST_SECTION_IN_BINARY: YES
+        SKIP_INSTALL: YES
+  SplitPipeProxy:
+    type: system-extension
+    platform: macOS
+    sources:
+      - SplitPipeProxy
+      - Shared
+    info:
+      path: SplitPipeProxy/Info.plist
+      properties:
+        CFBundleDisplayName: SplitPipe Proxy
+        CFBundlePackageType: SYSX
+        CFBundleVersion: $(EXTENSION_VERSION)
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        NSSystemExtensionUsageDescription: Routes selected applications through chosen network interfaces.
+        SPAppGroup: $(TeamIdentifierPrefix)dev.splitpipe
+        NetworkExtension:
+          NEMachServiceName: $(TeamIdentifierPrefix)dev.splitpipe.proxy
+          NEProviderClasses:
+            com.apple.networkextension.app-proxy: $(PRODUCT_MODULE_NAME).TransparentProxyProvider
+    entitlements:
+      path: SplitPipeProxy/SplitPipeProxy.entitlements
+      properties:
+        com.apple.developer.networking.networkextension:
+          - app-proxy-provider
+        com.apple.security.app-sandbox: true
+        com.apple.security.network.client: true
+        com.apple.security.network.server: true
+        com.apple.security.application-groups:
+          - $(TeamIdentifierPrefix)dev.splitpipe
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: dev.splitpipe.app.proxy
+        PRODUCT_NAME: dev.splitpipe.app.proxy
+        SKIP_INSTALL: YES

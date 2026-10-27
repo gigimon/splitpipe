@@ -1,0 +1,5 @@
+build/
+SplitPipe.xcodeproj/
+.DS_Store
+REVIEW*.md
+site/

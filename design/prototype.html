@@ -1,0 +1,1450 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SplitPipe Prototype</title>
+<style>
+:root{
+  --font:-apple-system,BlinkMacSystemFont,"SF Pro Text","Helvetica Neue",Arial,sans-serif;
+  --mono:ui-monospace,"SF Mono",Menlo,monospace;
+  --stage:#d9dbe1;
+}
+@media (prefers-color-scheme:dark){:root{--stage:#0e0f12}}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%;background:var(--stage);font-family:var(--font);-webkit-font-smoothing:antialiased;overflow:hidden}
+button,input,select{font:inherit;color:inherit}
+#app{display:flex;height:100vh;gap:16px;padding:12px;align-items:flex-start}
+#stagewrap{flex:1;min-width:0;display:flex;justify-content:center;align-items:flex-start;height:100%}
+#screenbox{position:relative}
+
+/* ---------- macOS screen ---------- */
+.screen{
+  --text:#1d1d1f;--text2:#6e6e73;--text3:#a1a1a6;--sep:rgba(0,0,0,.09);--sep2:rgba(0,0,0,.05);
+  --win:#ffffff;--content:#ffffff;--side:rgba(232,232,237,.82);--group:#f5f5f7;--groupb:rgba(0,0,0,.06);
+  --ctl:#ffffff;--ctlb:rgba(0,0,0,.14);--hover:rgba(0,0,0,.045);--sel:rgba(0,122,255,.12);--selsolid:#dbe8fb;
+  --accent:#007aff;--menu:rgba(244,244,246,.9);--bar:rgba(246,246,248,.62);--bartext:#1d1d1f;
+  --shadow:0 22px 70px rgba(0,0,0,.28),0 0 0 .5px rgba(0,0,0,.22);
+  --c-direct:#1f9d55;--c-default:#8a8a8f;--c-block:#e5484d;--c-warn:#e08600;--c-ok:#1f9d55;
+  --desk:radial-gradient(1200px 700px at 15% 10%,#9bb7e6 0,transparent 60%),radial-gradient(900px 600px at 85% 80%,#c9a4d9 0,transparent 60%),linear-gradient(160deg,#7d95c9,#b39cc8 55%,#e2b9b0);
+  position:absolute;top:0;left:0;width:1280px;height:800px;transform-origin:0 0;overflow:hidden;border-radius:14px;
+  background:var(--desk);color:var(--text);font-size:13px;line-height:1.35;user-select:none;
+  box-shadow:0 10px 40px rgba(0,0,0,.25);
+}
+.screen.dark{
+  --text:#f2f2f4;--text2:#a1a1a6;--text3:#6b6b70;--sep:rgba(255,255,255,.09);--sep2:rgba(255,255,255,.05);
+  --win:#1f1f22;--content:#1f1f22;--side:rgba(44,44,48,.8);--group:#2a2a2d;--groupb:rgba(255,255,255,.07);
+  --ctl:#3a3a3e;--ctlb:rgba(255,255,255,.12);--hover:rgba(255,255,255,.06);--sel:rgba(10,132,255,.22);--selsolid:#24364f;
+  --accent:#0a84ff;--menu:rgba(42,42,46,.92);--bar:rgba(30,30,34,.55);--bartext:#f2f2f4;
+  --shadow:0 22px 70px rgba(0,0,0,.6),0 0 0 .5px rgba(255,255,255,.14);
+  --c-direct:#32c766;--c-default:#98989d;--c-block:#ff6369;--c-warn:#ffb340;--c-ok:#32c766;
+  --desk:radial-gradient(1200px 700px at 15% 10%,#2b3a63 0,transparent 60%),radial-gradient(900px 600px at 85% 80%,#4a2f5c 0,transparent 60%),linear-gradient(160deg,#141a2e,#2a2040 55%,#3a2430);
+}
+.mono{font-family:var(--mono);font-size:11.5px}
+.dim{color:var(--text2)}
+.dim3{color:var(--text3)}
+svg.i{width:16px;height:16px;flex:none;stroke:currentColor;fill:none;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}
+svg.i.s{width:13px;height:13px}
+svg.i.l{width:20px;height:20px}
+
+/* menu bar */
+.menubar{position:absolute;top:0;left:0;right:0;height:26px;background:var(--bar);backdrop-filter:blur(30px) saturate(1.6);-webkit-backdrop-filter:blur(30px) saturate(1.6);display:flex;align-items:center;padding:0 10px;color:var(--bartext);font-size:13px;z-index:50}
+.menubar .mitem{padding:2px 9px;border-radius:5px}
+.menubar .mitem.b{font-weight:600}
+.menubar .right{margin-left:auto;display:flex;align-items:center;gap:2px}
+.menubar .ico{display:flex;align-items:center;justify-content:center;height:22px;min-width:28px;padding:0 6px;border-radius:5px;position:relative}
+.menubar .ico.on,.menubar .ico:hover{background:rgba(127,127,127,.22)}
+.menubar .clock{padding:0 8px;font-variant-numeric:tabular-nums}
+.mbdot{position:absolute;right:3px;top:3px;width:6px;height:6px;border-radius:50%}
+
+/* windows */
+.win{position:absolute;background:var(--win);border-radius:12px;box-shadow:var(--shadow);overflow:hidden;display:flex;flex-direction:column}
+.lights{display:flex;gap:8px;padding:0 4px}
+.lights span{width:12px;height:12px;border-radius:50%;background:#ff5f57;box-shadow:inset 0 0 0 .5px rgba(0,0,0,.18);cursor:default}
+.lights span:nth-child(2){background:#febc2e}
+.lights span:nth-child(3){background:#28c840}
+.lights.off span{background:var(--text3);opacity:.45}
+
+/* main window */
+#mainwin{width:1010px;height:640px}
+.mw{display:flex;height:100%}
+.sidebar{width:208px;flex:none;background:var(--side);backdrop-filter:blur(40px);-webkit-backdrop-filter:blur(40px);border-right:.5px solid var(--sep);display:flex;flex-direction:column}
+.sidebar .top{height:52px;display:flex;align-items:center;padding:0 14px;flex:none}
+.navsec{padding:6px 10px;color:var(--text3);font-size:11px;font-weight:600}
+.nav{margin:0 8px;padding:5px 8px;border-radius:6px;display:flex;align-items:center;gap:8px;cursor:default;color:var(--text)}
+.nav svg{color:var(--accent)}
+.nav:hover{background:var(--hover)}
+.nav.on{background:var(--sel)}
+.nav .badge{margin-left:auto;font-size:11px;color:var(--text2);font-variant-numeric:tabular-nums}
+.nav .badge.warn{color:var(--c-warn)}
+.nav .badge.dot{width:7px;height:7px;border-radius:50%;background:var(--c-warn)}
+.sidefoot{margin-top:auto;padding:12px;border-top:.5px solid var(--sep)}
+.stcard{display:flex;align-items:center;gap:10px}
+.stcard .big{width:30px;height:30px;border-radius:8px;display:flex;align-items:center;justify-content:center;color:#fff;flex:none}
+.stcard .t{font-weight:600}
+.stcard .s{font-size:11px;color:var(--text2)}
+.content{flex:1;min-width:0;display:flex;flex-direction:column;background:var(--content)}
+.toolbar{height:52px;flex:none;display:flex;align-items:center;gap:10px;padding:0 14px 0 18px;border-bottom:.5px solid var(--sep)}
+.toolbar h1{font-size:15px;font-weight:650;margin:0}
+.toolbar .sub{font-size:11px;color:var(--text2)}
+.toolbar .sp{flex:1}
+.body{flex:1;overflow:auto;min-height:0}
+.split{display:flex;flex:1;min-height:0}
+.inspector{width:292px;flex:none;border-left:.5px solid var(--sep);overflow:auto;background:var(--content)}
+
+/* controls */
+.btn{color:var(--text);border:.5px solid var(--ctlb);background:var(--ctl);border-radius:6px;padding:3px 10px;font-size:12.5px;box-shadow:0 .5px 1.5px rgba(0,0,0,.08);cursor:default;display:inline-flex;align-items:center;gap:6px;white-space:nowrap}
+.btn:hover{background:color-mix(in srgb,var(--ctl) 92%,var(--text))}
+.btn:active{filter:brightness(.92)}
+.screen.dark .btn:not(.primary):not(.dangerfill):not(.ghost){background:#4a4a50;border-color:rgba(255,255,255,.16);box-shadow:0 1px 2px rgba(0,0,0,.35),inset 0 .5px 0 rgba(255,255,255,.08)}
+.screen.dark .btn:not(.primary):not(.dangerfill):not(.ghost):hover{background:#58585f}
+.btn.primary:hover{filter:brightness(1.08)}
+.btn[disabled]:hover{background:var(--ctl);filter:none}
+.btn.primary{background:var(--accent);color:#fff;border-color:transparent}
+.btn.danger{color:var(--c-block)}
+.btn.dangerfill{background:var(--c-block);color:#fff;border-color:transparent}
+.btn.big{padding:6px 16px;font-size:13px;border-radius:7px}
+.btn[disabled]{opacity:.5}
+.btn.ghost{background:transparent;border-color:transparent;box-shadow:none;color:var(--accent);padding:3px 6px}
+.iconbtn{border:none;background:transparent;border-radius:6px;padding:4px 6px;color:var(--text2);display:inline-flex;align-items:center;cursor:default}
+.iconbtn:hover{background:var(--hover)}
+.iconbtn.on{color:var(--accent);background:var(--sel)}
+.search{display:flex;align-items:center;gap:6px;background:var(--hover);border-radius:7px;padding:4px 8px;width:190px;color:var(--text2)}
+.search input{border:none;background:transparent;outline:none;width:100%;font-size:12.5px;color:var(--text)}
+.seg{display:inline-flex;background:var(--hover);border-radius:7px;padding:2px;gap:2px}
+.seg button{border:none;background:transparent;border-radius:5px;padding:2px 10px;font-size:12px;cursor:default;white-space:nowrap}
+.seg button.on{background:var(--ctl);box-shadow:0 .5px 2px rgba(0,0,0,.15)}
+.toggle{width:32px;height:19px;border-radius:10px;background:rgba(120,120,128,.32);position:relative;flex:none;cursor:default;border:none;padding:0;transition:background .15s}
+.toggle::after{content:"";position:absolute;top:2px;left:2px;width:15px;height:15px;border-radius:50%;background:#fff;box-shadow:0 1px 2px rgba(0,0,0,.3);transition:left .15s}
+.toggle.on{background:#34c759}
+.toggle.on::after{left:15px}
+.toggle.sm{width:26px;height:15px}
+.toggle.sm::after{width:11px;height:11px}
+.toggle.sm.on::after{left:13px}
+.popup{display:inline-flex;align-items:center;gap:6px;border:.5px solid var(--ctlb);background:var(--ctl);border-radius:6px;padding:3px 6px 3px 8px;font-size:12.5px;box-shadow:0 .5px 1.5px rgba(0,0,0,.08);cursor:default;min-width:0;max-width:100%}
+.popup .lbl{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.popup .chev{margin-left:auto;color:var(--text2);padding-left:4px}
+.popup.wide{width:200px}
+.popup.full{width:100%}
+.popup.cmp{padding:2px 4px 2px 6px;font-size:12px}
+.popup.cmp.wide{width:168px}
+.popup.na .rico{color:var(--text3)!important}
+.textin{border:.5px solid var(--ctlb);background:var(--ctl);border-radius:6px;padding:3px 8px;font-size:12.5px;outline:none;width:240px}
+.textin:focus{box-shadow:0 0 0 3px rgba(0,122,255,.3)}
+.pill{display:inline-flex;align-items:center;gap:5px;font-size:11px;padding:1px 7px 1px 6px;border-radius:20px;white-space:nowrap;font-weight:500}
+.pill .d{width:6px;height:6px;border-radius:50%;background:currentColor}
+.tag{display:inline-flex;align-items:center;gap:4px;font-size:11px;font-weight:550;padding:1px 7px;border-radius:5px;white-space:nowrap}
+
+/* app rows */
+.empty{margin:14px 18px 6px;padding:16px;border-radius:10px;background:var(--group);border:.5px solid var(--groupb);display:flex;gap:14px;align-items:center}
+.empty .em{width:40px;height:40px;border-radius:10px;background:var(--sel);color:var(--accent);display:flex;align-items:center;justify-content:center;flex:none}
+.listhead{padding:10px 18px 4px;font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.03em}
+.row{display:flex;align-items:center;gap:11px;padding:7px 14px 7px 18px;border-bottom:.5px solid var(--sep2);cursor:default}
+.row:hover{background:var(--hover)}
+.row.on{background:var(--sel)}
+.appico{width:30px;height:30px;border-radius:8px;display:flex;align-items:center;justify-content:center;color:#fff;font-weight:700;font-size:14px;flex:none;box-shadow:inset 0 0 0 .5px rgba(0,0,0,.15),0 1px 2px rgba(0,0,0,.12)}
+.appico.s{width:20px;height:20px;border-radius:5px;font-size:10px}
+.appico.xs{width:16px;height:16px;border-radius:4px;font-size:9px}
+.appico.l{width:44px;height:44px;border-radius:11px;font-size:20px}
+.row .nm{flex:1;min-width:0}
+.row .nm .a{font-weight:550;display:flex;align-items:center;gap:6px}
+.row .nm .b{font-size:11px;color:var(--text2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.run{width:6px;height:6px;border-radius:50%;background:var(--c-ok);display:inline-block}
+.eff{font-size:11px;display:flex;align-items:center;gap:4px;margin-top:2px}
+
+/* inspector */
+.isec{padding:14px 16px;border-bottom:.5px solid var(--sep)}
+.isec h3{margin:0 0 8px;font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.03em;font-weight:600}
+.ihead{display:flex;gap:12px;align-items:center}
+.ihead .n{font-size:15px;font-weight:650}
+.radio{display:flex;gap:8px;align-items:flex-start;padding:5px 0;cursor:default}
+.radio .rb{width:15px;height:15px;border-radius:50%;border:.5px solid var(--ctlb);background:var(--ctl);flex:none;margin-top:1px;box-shadow:0 .5px 1px rgba(0,0,0,.1);display:flex;align-items:center;justify-content:center}
+.radio.on .rb{background:var(--accent);border-color:transparent}
+.radio.on .rb::after{content:"";width:5px;height:5px;border-radius:50%;background:#fff}
+.radio .hint{font-size:11px;color:var(--text2);margin-top:2px}
+.radio.dis{opacity:.45}
+.effbox{display:flex;gap:10px;align-items:flex-start;padding:10px;border-radius:8px;background:var(--group);border:.5px solid var(--groupb)}
+.miniconn{display:flex;gap:8px;align-items:center;font-size:11.5px;padding:3px 0}
+.miniconn .mono{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+
+/* routes */
+.rgrid{display:grid;grid-template-columns:1fr 1fr;gap:12px;padding:0 18px 8px}
+.rcard{border-radius:11px;background:var(--group);border:.5px solid var(--groupb);padding:14px;display:flex;flex-direction:column;gap:10px}
+.rcard.down{opacity:.92}
+.rcard .hd{display:flex;align-items:center;gap:10px}
+.rcard .ri{width:32px;height:32px;border-radius:9px;display:flex;align-items:center;justify-content:center;color:#fff;flex:none}
+.rcard .ti{font-weight:650;font-size:13.5px;flex:1;min-width:0}
+.rcard .ti input{font-weight:650;font-size:13.5px;border:none;outline:none;background:var(--ctl);border-radius:4px;padding:0 4px;width:100%;box-shadow:0 0 0 2px var(--accent)}
+.rcard .ti .rn{cursor:text;border-radius:4px;padding:0 2px;margin:0 -2px}
+.rcard .ti .rn:hover{background:var(--hover)}
+.kv{display:grid;grid-template-columns:96px 1fr;row-gap:4px;font-size:12px}
+.kv .k{color:var(--text2)}
+.rcard .ft{display:flex;align-items:center;gap:8px;border-top:.5px solid var(--sep);padding-top:10px;font-size:11.5px;color:var(--text2)}
+.banner{margin:14px 18px 4px;border-radius:10px;padding:10px 12px;display:flex;gap:10px;align-items:center;border:.5px solid}
+.banner.ok{background:color-mix(in srgb,var(--c-ok) 9%,transparent);border-color:color-mix(in srgb,var(--c-ok) 30%,transparent)}
+.banner.warn{background:color-mix(in srgb,var(--c-warn) 11%,transparent);border-color:color-mix(in srgb,var(--c-warn) 34%,transparent)}
+.banner.bad{background:color-mix(in srgb,var(--c-block) 10%,transparent);border-color:color-mix(in srgb,var(--c-block) 32%,transparent)}
+.banner .bt{flex:1;font-size:12.5px}
+.banner .bt b{font-weight:600}
+.banner .bt div{font-size:11.5px;color:var(--text2)}
+
+/* connections table */
+table.ct{width:100%;border-collapse:collapse;font-size:12px}
+.ct th{position:sticky;top:0;background:var(--content);text-align:left;font-weight:500;color:var(--text2);font-size:11px;padding:6px 8px;border-bottom:.5px solid var(--sep);z-index:1}
+.ct td{padding:5px 8px;border-bottom:.5px solid var(--sep2);white-space:nowrap}
+.ct tr.ab td{opacity:.45}
+.ct tr.ab .mono{text-decoration:line-through}
+.ct tr.new td{animation:flash 1.2s ease-out}
+@keyframes flash{from{background:var(--sel)}to{background:transparent}}
+.ct .grp td{background:var(--group);font-weight:600;padding:6px 8px;cursor:default}
+.ct td.num{text-align:right;font-variant-numeric:tabular-nums;color:var(--text2)}
+.ct th:first-child,.ct td:first-child{padding-left:18px}
+
+/* diagnostics */
+.dlist{padding:6px 18px 18px}
+.ditem{display:flex;gap:12px;align-items:flex-start;padding:10px 0;border-bottom:.5px solid var(--sep2)}
+.ditem .st{width:20px;height:20px;flex:none;display:flex;align-items:center;justify-content:center;margin-top:1px}
+.ditem .tx{flex:1}
+.ditem .tx .t{font-weight:550}
+.ditem .tx .d{font-size:12px;color:var(--text2)}
+.spin{width:14px;height:14px;border-radius:50%;border:2px solid var(--sep);border-top-color:var(--accent);animation:sp .7s linear infinite}
+@keyframes sp{to{transform:rotate(360deg)}}
+
+/* onboarding */
+.onb{flex:1;display:flex;align-items:center;justify-content:center;background:var(--content)}
+.onbc{width:500px}
+.onbc .logo{display:flex;justify-content:center;margin-bottom:12px}
+.onbc h2{text-align:center;margin:0 0 4px;font-size:22px;font-weight:700}
+.onbc .lead{text-align:center;color:var(--text2);margin:0 0 22px}
+.prog{height:4px;border-radius:3px;background:var(--hover);margin:0 0 18px;overflow:hidden}
+.prog div{height:100%;background:var(--accent);transition:width .3s}
+.step{display:flex;gap:12px;padding:12px;border-radius:10px;margin-bottom:8px;border:.5px solid transparent}
+.step.cur{background:var(--group);border-color:var(--groupb)}
+.step .num{width:26px;height:26px;border-radius:50%;flex:none;display:flex;align-items:center;justify-content:center;font-weight:650;font-size:12px;background:var(--hover);color:var(--text2)}
+.step.done .num{background:var(--c-ok);color:#fff}
+.step.err .num{background:var(--c-block);color:#fff}
+.step.cur .num{background:var(--accent);color:#fff}
+.step .st1{font-weight:600}
+.step .st2{font-size:12px;color:var(--text2);margin-top:2px}
+.step .act{margin-top:10px;display:flex;gap:8px;align-items:center}
+.step .errm{font-size:12px;color:var(--c-block);margin-top:6px}
+
+/* statistics */
+.stiles{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;padding:14px 18px 6px}
+.stile{border-radius:11px;background:var(--group);border:.5px solid var(--groupb);padding:12px 14px;display:flex;flex-direction:column;gap:3px;min-width:0}
+.stile .k{font-size:11px;color:var(--text2);display:flex;align-items:center;gap:5px}
+.stile .v{font-size:20px;font-weight:650;letter-spacing:-.01em;font-variant-numeric:tabular-nums}
+.stile .s{font-size:11px;color:var(--text2);font-variant-numeric:tabular-nums}
+.scard{margin:8px 18px 4px;border-radius:11px;background:var(--group);border:.5px solid var(--groupb);padding:14px}
+.scard .hd{display:flex;align-items:center;gap:10px;margin-bottom:10px}
+.scard .hd b{font-size:13px;font-weight:650}
+.legend{display:flex;gap:14px;flex-wrap:wrap;font-size:11.5px;color:var(--text2)}
+.legend span{display:inline-flex;align-items:center;gap:5px}
+.legend i{width:9px;height:9px;border-radius:3px;display:inline-block}
+.chart{width:100%;height:170px;display:block}
+.chart .ax{fill:var(--text3);font-size:10px}
+.chart .gl{stroke:var(--sep);stroke-width:.5}
+.chart rect.b:hover{opacity:.75}
+.sbar{height:6px;border-radius:3px;background:var(--hover);overflow:hidden;display:flex}
+.sbar>div{height:100%}
+.rrow{display:grid;grid-template-columns:24px 1fr 1.3fr 90px 70px;align-items:center;gap:10px;padding:7px 0;border-top:.5px solid var(--sep2);font-size:12.5px}
+.rrow:first-of-type{border-top:none}
+.rrow .num,.st .num{text-align:right;font-variant-numeric:tabular-nums}
+.st{width:100%;border-collapse:collapse;font-size:12.5px}
+.st th{font-weight:500;color:var(--text2);font-size:11px;text-align:left;padding:4px 6px;border-bottom:.5px solid var(--sep)}
+.st td{padding:6px;border-bottom:.5px solid var(--sep2);vertical-align:middle}
+.st tr:hover td{background:var(--hover)}
+.st .share{display:flex;align-items:center;gap:8px}
+.st .share .sbar{flex:1;min-width:60px}
+
+/* popover */
+.popover{position:absolute;top:31px;width:344px;background:var(--menu);backdrop-filter:blur(40px) saturate(1.8);-webkit-backdrop-filter:blur(40px) saturate(1.8);border-radius:12px;box-shadow:var(--shadow);z-index:60;padding:8px;font-size:12.5px}
+.pv-head{display:flex;align-items:center;gap:10px;padding:6px 6px 10px}
+.pv-head .t{font-weight:650;font-size:13.5px}
+.pv-head .s{font-size:11.5px;color:var(--text2)}
+.pv-sec{padding:6px 6px 2px;font-size:11px;font-weight:600;color:var(--text3)}
+.pv-row{display:flex;align-items:center;gap:8px;padding:4px 6px;border-radius:6px}
+.pv-row .n{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pv-fg{margin:2px 0 4px;padding:8px;border-radius:9px;background:var(--hover)}
+.pv-fg .pv-row{padding:0}
+.pv-ban{margin:4px 2px 6px;padding:7px 9px;border-radius:8px;font-size:11.5px;display:flex;gap:7px;align-items:flex-start}
+.pv-ban.warn{background:color-mix(in srgb,var(--c-warn) 15%,transparent)}
+.pv-ban.bad{background:color-mix(in srgb,var(--c-block) 14%,transparent)}
+.pv-sep{height:.5px;background:var(--sep);margin:6px 4px}
+.pv-item{padding:4px 8px;border-radius:5px;cursor:default;display:flex;justify-content:space-between}
+.pv-item:hover{background:var(--accent);color:#fff}
+.pv-item:hover .dim{color:rgba(255,255,255,.8)}
+.ks{display:inline-flex;align-items:center;gap:5px;font-size:11px;padding:2px 8px;border-radius:20px;background:var(--hover);color:var(--text2);white-space:nowrap}
+.ks.blk{background:color-mix(in srgb,var(--c-block) 16%,transparent);color:var(--c-block)}
+.ks.arm{color:var(--text)}
+
+/* menus */
+.menu{position:absolute;z-index:200;min-width:220px;background:var(--menu);backdrop-filter:blur(40px) saturate(1.8);-webkit-backdrop-filter:blur(40px) saturate(1.8);border-radius:9px;box-shadow:0 10px 40px rgba(0,0,0,.25),0 0 0 .5px var(--ctlb);padding:5px;font-size:13px}
+.menu .mh{padding:5px 10px 2px;font-size:11px;font-weight:600;color:var(--text3)}
+.menu .ms{height:.5px;background:var(--sep);margin:5px 6px}
+.menu .mi{display:flex;align-items:center;gap:8px;padding:4px 10px 4px 6px;border-radius:5px;cursor:default;white-space:nowrap}
+.menu .mi .ck{width:14px;display:flex;justify-content:center}
+.menu .mi .sb{margin-left:auto;padding-left:14px;font-size:11.5px;color:var(--text3)}
+.menu .mi.dimmed{color:var(--text3)}
+.menu .mi:hover{background:var(--accent);color:#fff}
+.menu .mi:hover .sb,.menu .mi:hover .rico{color:rgba(255,255,255,.85)!important}
+
+/* settings */
+#setwin{width:660px;height:560px}
+.settb{display:flex;flex-direction:column;align-items:center;padding-top:10px;border-bottom:.5px solid var(--sep);background:var(--side);flex:none}
+.settb .ttl{font-weight:600;font-size:13px;margin-bottom:6px}
+.settb .tabs{display:flex;gap:2px;padding-bottom:6px}
+.settb .tab{display:flex;flex-direction:column;align-items:center;gap:3px;padding:5px 9px;border-radius:7px;font-size:11px;color:var(--text2);cursor:default;min-width:72px}
+.settb .tab svg{width:22px;height:22px;color:var(--text2)}
+.settb .tab.on{background:var(--hover);color:var(--accent)}
+.settb .tab.on svg{color:var(--accent)}
+.setbody{flex:1;overflow:auto;padding:18px 22px}
+.fgroup{border-radius:9px;background:var(--group);border:.5px solid var(--groupb);margin-bottom:16px}
+.fgroup .fh{font-size:12px;font-weight:600;padding:0 4px 6px;color:var(--text)}
+.frow{display:flex;align-items:center;gap:12px;padding:9px 12px;border-bottom:.5px solid var(--sep)}
+.frow:last-child{border-bottom:none}
+.frow .fl{flex:1}
+.frow .fl .h{font-size:11.5px;color:var(--text2);margin-top:2px}
+.fnote{font-size:11.5px;color:var(--text2);padding:0 4px;margin:-8px 0 16px}
+.hintbox{display:flex;gap:8px;padding:9px 12px;border-radius:9px;margin-bottom:16px;font-size:12px;background:var(--sel)}
+
+/* system settings fake */
+#syswin{width:620px;height:430px}
+.sysw{display:flex;height:100%}
+.sysw .ss{width:190px;background:var(--side);border-right:.5px solid var(--sep);padding-top:44px}
+.sysw .ss .it{margin:1px 8px;padding:4px 8px;border-radius:6px;display:flex;gap:8px;align-items:center;font-size:12.5px}
+.sysw .ss .it .sq{width:18px;height:18px;border-radius:5px;flex:none}
+.sysw .ss .it.on{background:var(--accent);color:#fff}
+.sysw .sc{flex:1;padding:44px 20px 20px;overflow:auto}
+.sysw .sc h2{font-size:15px;margin:0 0 14px}
+
+/* dialogs */
+.scrim{position:absolute;inset:0;background:rgba(0,0,0,.18);z-index:120;display:flex;align-items:center;justify-content:center}
+.dialog{width:300px;background:var(--menu);backdrop-filter:blur(40px);-webkit-backdrop-filter:blur(40px);border-radius:14px;box-shadow:var(--shadow);padding:20px 18px 16px;text-align:center}
+.dialog h4{margin:10px 0 6px;font-size:13.5px}
+.dialog p{margin:0 0 14px;font-size:11.5px;color:var(--text2)}
+.dialog .db{display:flex;flex-direction:column;gap:6px}
+.dialog .db .btn{justify-content:center;padding:5px 10px}
+
+/* notification */
+.notif{position:absolute;right:10px;top:34px;width:340px;background:var(--menu);backdrop-filter:blur(40px);-webkit-backdrop-filter:blur(40px);border-radius:14px;box-shadow:var(--shadow);padding:11px 12px;display:flex;gap:10px;z-index:90;animation:nin .3s ease-out}
+@keyframes nin{from{transform:translateX(30px);opacity:0}}
+.notif .t{font-weight:600;font-size:12.5px}
+.notif .b{font-size:12px;color:var(--text2)}
+.toast{position:absolute;left:50%;bottom:28px;transform:translateX(-50%);background:rgba(30,30,32,.9);color:#fff;padding:8px 14px;border-radius:9px;font-size:12.5px;z-index:150}
+
+/* ---------- simulation panel (outside macOS) ---------- */
+#sim{width:278px;flex:none;height:calc(100vh - 24px);overflow:auto;background:#fffdf3;color:#2b2a26;border:2px dashed #c9b25b;border-radius:12px;padding:12px 14px;font-family:var(--mono);font-size:11.5px}
+@media (prefers-color-scheme:dark){#sim{background:#1c1a12;color:#e9e3c8;border-color:#7d6c2c}}
+#sim.min{width:42px;padding:10px 6px;overflow:hidden}
+#sim.min .sb{display:none}
+#sim h2{font-size:12px;margin:0;letter-spacing:.06em;text-transform:uppercase;display:flex;align-items:center;gap:8px}
+#sim .note{opacity:.7;margin:4px 0 10px;line-height:1.4}
+#sim h5{margin:14px 0 6px;font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;opacity:.65}
+#sim .sr{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:3px 0}
+#sim button.sw{font-family:var(--mono);font-size:11px;border:1.5px solid currentColor;background:transparent;border-radius:5px;padding:2px 8px;cursor:pointer;min-width:58px}
+#sim button.sw.on{background:#2b2a26;color:#fffdf3}
+@media (prefers-color-scheme:dark){#sim button.sw.on{background:#e9e3c8;color:#1c1a12}}
+#sim .sg{display:flex;gap:4px;flex-wrap:wrap}
+#sim select{font-family:var(--mono);font-size:11px;background:transparent;border:1.5px solid currentColor;border-radius:5px;padding:2px 4px;max-width:140px}
+#sim button.act{font-family:var(--mono);font-size:11px;width:100%;text-align:left;border:1.5px solid currentColor;background:transparent;border-radius:5px;padding:4px 8px;margin:3px 0;cursor:pointer}
+#sim .scn{margin:6px 0;padding:6px 8px;border-left:3px solid #c9b25b;line-height:1.4;opacity:.9}
+#sim .mintog{cursor:pointer;border:1.5px solid currentColor;background:transparent;border-radius:5px;font-family:var(--mono);font-size:11px;padding:0 6px}
+</style>
+</head>
+<body>
+<div id="app">
+  <div id="stagewrap"><div id="screenbox"><div class="screen" id="screen"></div></div></div>
+  <aside id="sim"></aside>
+</div>
+<script>
+"use strict";
+/* ============================== icons ============================== */
+const P = {
+  shield:'<path d="M10 2.6l6 2.2v4.5c0 3.8-2.5 6.6-6 8.1-3.5-1.5-6-4.3-6-8.1V4.8z"/>',
+  wifi:'<path d="M2.8 8.3a10.2 10.2 0 0 1 14.4 0"/><path d="M5.3 11a6.6 6.6 0 0 1 9.4 0"/><path d="M7.9 13.7a3 3 0 0 1 4.2 0"/><circle cx="10" cy="16.1" r=".9" fill="currentColor" stroke="none"/>',
+  cable:'<rect x="6" y="3" width="8" height="6.5" rx="1.3"/><path d="M8.5 3V1.8M11.5 3V1.8M10 9.5v3.3M10 12.8c0 2.3-1.7 3.9-4 3.9"/>',
+  branch:'<path d="M10 17.5V10.8M10 10.8L5.2 4.6M10 10.8l4.8-6.2M5 4.4h3M5 4.4v3M15 4.4h-3M15 4.4v3"/>',
+  block:'<circle cx="10" cy="10" r="7"/><path d="M5.1 5.1l9.8 9.8"/>',
+  grid:'<rect x="3" y="3" width="5.6" height="5.6" rx="1.4"/><rect x="11.4" y="3" width="5.6" height="5.6" rx="1.4"/><rect x="3" y="11.4" width="5.6" height="5.6" rx="1.4"/><rect x="11.4" y="11.4" width="5.6" height="5.6" rx="1.4"/>',
+  routes:'<path d="M3 6.5h11.5M11.5 3.5l3 3-3 3M17 13.5H5.5M8.5 10.5l-3 3 3 3"/>',
+  list:'<path d="M7 5h10M7 10h10M7 15h10"/><circle cx="3.6" cy="5" r=".9" fill="currentColor" stroke="none"/><circle cx="3.6" cy="10" r=".9" fill="currentColor" stroke="none"/><circle cx="3.6" cy="15" r=".9" fill="currentColor" stroke="none"/>',
+  chart:'<path d="M3 16.5h14"/><path d="M5.5 14V9.5M9 14V5M12.5 14v-6.5M16 14v-3.5"/>',
+  pulse:'<path d="M2 10.5h3.2l2-5 3.3 10 2.2-6.5 1.6 1.5H18"/>',
+  gear:'<circle cx="10" cy="10" r="2.6"/><path d="M10 2.5v2M10 15.5v2M2.5 10h2M15.5 10h2M4.7 4.7l1.4 1.4M13.9 13.9l1.4 1.4M4.7 15.3l1.4-1.4M13.9 6.1l1.4-1.4"/>',
+  search:'<circle cx="8.6" cy="8.6" r="5"/><path d="M12.4 12.4l4.2 4.2"/>',
+  chev:'<path d="M7 7.6l3-3 3 3M7 12.4l3 3 3-3"/>',
+  check:'<path d="M4.5 10.5l3.6 3.6 7.4-8.2"/>',
+  checkc:'<circle cx="10" cy="10" r="7.5" fill="currentColor" stroke="none"/><path d="M6.6 10.3l2.3 2.3 4.6-5" stroke="#fff" stroke-width="1.9"/>',
+  xc:'<circle cx="10" cy="10" r="7.5" fill="currentColor" stroke="none"/><path d="M7.4 7.4l5.2 5.2M12.6 7.4l-5.2 5.2" stroke="#fff" stroke-width="1.9"/>',
+  warnt:'<path d="M10 2.8L18 16.8H2z" fill="currentColor" stroke="currentColor" stroke-width="1.2"/><path d="M10 8v4" stroke="#fff" stroke-width="1.9"/><circle cx="10" cy="14.4" r="1" fill="#fff" stroke="none"/>',
+  infoc:'<circle cx="10" cy="10" r="7.5" fill="currentColor" stroke="none"/><path d="M10 9v4.6" stroke="#fff" stroke-width="1.9"/><circle cx="10" cy="6.4" r="1.05" fill="#fff" stroke="none"/>',
+  pause:'<path d="M7 4.5v11M13 4.5v11"/>',
+  play:'<path d="M6.5 4.5l9 5.5-9 5.5z"/>',
+  power:'<path d="M10 2.8v6.4"/><path d="M6 5.3a6.2 6.2 0 1 0 8 0"/>',
+  bell:'<path d="M5 13.8V9a5 5 0 0 1 10 0v4.8l1.4 1.5H3.6zM8.3 17.4a1.8 1.8 0 0 0 3.4 0"/>',
+  globe:'<circle cx="10" cy="10" r="7.2"/><ellipse cx="10" cy="10" rx="3.1" ry="7.2"/><path d="M3 10h14"/>',
+  gauge:'<path d="M3.2 14.5a7.2 7.2 0 1 1 13.6 0"/><path d="M10 11l3.4-3.6"/><circle cx="10" cy="11.4" r="1" fill="currentColor"/>',
+  dots:'<circle cx="5" cy="10" r="1.2" fill="currentColor" stroke="none"/><circle cx="10" cy="10" r="1.2" fill="currentColor" stroke="none"/><circle cx="15" cy="10" r="1.2" fill="currentColor" stroke="none"/>',
+  lockshield:'<path d="M10 2.6l6 2.2v4.5c0 3.8-2.5 6.6-6 8.1-3.5-1.5-6-4.3-6-8.1V4.8z"/><path d="M7.3 9.8l1.9 1.9 3.6-3.9"/>',
+  cut:'<circle cx="6" cy="14.5" r="2.4"/><circle cx="14" cy="14.5" r="2.4"/><path d="M7.6 12.6L14.5 3.5M12.4 12.6L5.5 3.5"/>',
+  refresh:'<path d="M15.8 7.6A6.2 6.2 0 0 0 4.4 7M4.2 12.4A6.2 6.2 0 0 0 15.6 13M15.9 3.6v4.2h-4.2M4.1 16.4v-4.2h4.2"/>',
+  wifi_off:'<path d="M2.8 8.3a10.2 10.2 0 0 1 14.4 0"/><path d="M5.3 11a6.6 6.6 0 0 1 9.4 0"/><path d="M3 3l14 14"/>',
+  battery:'<rect x="2.5" y="6" width="13" height="8" rx="2"/><rect x="4.2" y="7.7" width="7.5" height="4.6" rx=".8" fill="currentColor" stroke="none"/><path d="M17.3 8.6v2.8"/>',
+  ctrl:'<rect x="3" y="4" width="14" height="5" rx="2.5"/><rect x="3" y="11" width="14" height="5" rx="2.5"/><circle cx="6.5" cy="6.5" r="1.4" fill="currentColor"/><circle cx="13.5" cy="13.5" r="1.4" fill="currentColor"/>',
+  spot:'<circle cx="8.6" cy="8.6" r="5"/><path d="M12.4 12.4l4.2 4.2"/>',
+  excl:'<path d="M10 4.2v7.4" stroke-width="2.2"/><circle cx="10" cy="15.3" r="1.3" fill="currentColor" stroke="none"/>',
+  pipe:'<path d="M1.8 10h5.4c2.4 0 3-4.6 6.3-4.6h4.7M7.2 10c2.4 0 3 4.6 6.3 4.6h4.7" stroke-width="2"/>',
+};
+const ic = (n, cls='', style='') => `<svg class="i ${cls}" viewBox="0 0 20 20" style="${style}">${P[n]||''}</svg>`;
+const logo = (sz=64) => `<svg width="${sz}" height="${sz}" viewBox="0 0 64 64" style="flex:none"><defs><linearGradient id="lg${sz}" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#5e5ce6"/><stop offset="1" stop-color="#14b8a6"/></linearGradient></defs><rect x="2" y="2" width="60" height="60" rx="14" fill="url(#lg${sz})"/><rect x="2" y="2" width="60" height="60" rx="14" fill="none" stroke="rgba(0,0,0,.12)"/><path d="M10 32h14c7 0 8-13 18-13h12M24 32c7 0 8 13 18 13h12" fill="none" stroke="#fff" stroke-width="5" stroke-linecap="round"/><circle cx="54" cy="19" r="3.4" fill="#fff"/><circle cx="54" cy="45" r="3.4" fill="#fff" opacity=".8"/></svg>`;
+const esc = s => String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+
+/* ============================== state ============================== */
+const S = {
+  theme: matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light',
+  enabled: true, ext: true, helper: true,
+  onboarding: null,
+  view: 'apps', filter: 'all', search: '', selected: 'opera',
+  routes: {
+    direct:  {id:'direct', kind:'direct', phys:'wifi'},
+    amnezia: {id:'amnezia', kind:'vpn', name:'Amnezia VPN', iface:'utun4', ip:'10.8.1.1', ext:'198.51.100.20', up:true, client:'AmneziaVPN', color:'#5e5ce6', holdsDefault:true},
+    work:    {id:'work', kind:'vpn', name:'WireGuard «Work»', iface:'utun6', ip:'10.20.0.14', ext:'192.0.2.30', up:true, client:'WireGuard', color:'#0a9fb5'},
+    office:  {id:'office', kind:'vpn', name:'OpenVPN Office', iface:'utun7', ip:'10.66.3.21', ext:'77.88.12.40', up:false, client:'OpenVPN Connect', color:'#a259d9'},
+  },
+  vpnOrder: ['amnezia','work','office'],
+  amneziaKS: true,
+  foreground: 'opera',
+  onbErrStep: 0,
+  settings: {
+    launchAtLogin:true, menuBar:true, dock:false, notify:true,
+    ksMode:'off', ksLan:true,
+    newRoute:'default', fbVpn:'block', fbDirect:'default', abortOnChange:true, lanDirect:true, ipv6:'reject', noQuic:false,
+    dns:'system', dnsCustom:'1.1.1.1', dnsDoh:'https://dns.google/dns-query',
+    echo:'https://api.ipify.org', interval:'5',
+    log:'info',
+  },
+  conns: [], paused:false, grouped:false, connFilter:'all', collapsed:{},
+  checks:{}, diag:null, renaming:null,
+  statsPeriod:'today',
+  mainOpen:true, setOpen:false, setTab:'general', popover:false,
+  sys:null, alert:null, confirm:null, notif:null, toast:null,
+  win: { main:{x:26,y:52}, set:{x:520,y:110}, sys:{x:330,y:150} },
+  simMin:false,
+};
+const APPS = [
+  {id:'opera', name:'Opera', bundle:'com.operasoftware.Opera', color:'linear-gradient(135deg,#ff4b55,#c4001a)', g:'O', running:true, rule:{route:'direct', fb:'default'},
+    hosts:[['185.26.182.90:443','opera.com'],['185.26.182.94:443','sitecheck.opera.com'],['142.250.74.46:443','google.com'],['104.16.85.20:443','cdnjs.cloudflare.com'],['87.250.250.242:443','yandex.ru']]},
+  {id:'telegram', name:'Telegram', bundle:'ru.keepcoder.Telegram', color:'linear-gradient(135deg,#37b6f0,#1c8ad2)', g:'✈', running:true, rule:{route:'direct', fb:'default'},
+    hosts:[['149.154.167.51:443','telegram'],['149.154.175.53:443','telegram'],['91.108.56.130:443','telegram cdn']]},
+  {id:'safari', name:'Safari', bundle:'com.apple.Safari', color:'linear-gradient(135deg,#4fb7ff,#1360e0)', g:'S', running:true, rule:{route:'default', fb:'default'},
+    hosts:[['17.253.144.10:443','apple.com'],['151.101.1.140:443','reddit.com'],['140.82.121.4:443','github.com']]},
+  {id:'slack', name:'Slack', bundle:'com.tinyspeck.slackmacgap', color:'linear-gradient(135deg,#7c3a7f,#4a154b)', g:'#', running:true, rule:{route:'work', fb:'block'},
+    hosts:[['54.192.18.21:443','slack.com'],['3.120.88.15:443','wss.slack.com']]},
+  {id:'jira', name:'Jira', bundle:'com.atlassian.jira.mac', color:'linear-gradient(135deg,#2684ff,#0047b3)', g:'J', running:false, rule:{route:'work', fb:'alt:office'},
+    hosts:[['13.227.146.33:443','company.atlassian.net']]},
+  {id:'onec', name:'1С:Предприятие', bundle:'com.1c.enterprise', color:'linear-gradient(135deg,#ffd84d,#f0a800)', g:'1С', running:false, rule:{route:'office', fb:'block'},
+    hosts:[['10.66.0.5:1541','srv-1c.office']]},
+  {id:'yamusic', name:'Яндекс Музыка', bundle:'ru.yandex.music', color:'linear-gradient(135deg,#ff6a3d,#e8002a)', g:'♫', running:true, rule:{route:'direct', fb:'default'},
+    hosts:[['213.180.204.62:443','music.yandex.ru'],['5.255.255.77:443','strm.yandex.net']]},
+  {id:'steam', name:'Steam', bundle:'com.valvesoftware.steam', color:'linear-gradient(135deg,#2a475e,#171a21)', g:'S', running:false, rule:{route:'block', fb:'block'},
+    hosts:[['23.53.38.21:443','steampowered.com']]},
+  {id:'xcode', name:'Xcode', bundle:'com.apple.dt.Xcode', color:'linear-gradient(135deg,#5cc1ff,#147efb)', g:'⚒', running:true, rule:{route:'default', fb:'default'},
+    hosts:[['17.253.53.207:443','developer.apple.com'],['140.82.121.4:443','github.com']]},
+  {id:'spotify', name:'Spotify', bundle:'com.spotify.client', color:'linear-gradient(135deg,#34d26a,#149c45)', g:'◉', running:true, rule:null,
+    hosts:[['35.186.224.25:443','spclient.wg.spotify.com']]},
+  {id:'zoom', name:'Zoom', bundle:'us.zoom.xos', color:'linear-gradient(135deg,#4ca3ff,#0b5cff)', g:'Z', running:false, rule:null,
+    hosts:[['170.114.10.86:443','zoom.us']]},
+  {id:'notion', name:'Notion', bundle:'notion.id', color:'linear-gradient(135deg,#4a4a4a,#111)', g:'N', running:true, rule:null,
+    hosts:[['104.18.22.110:443','notion.so']]},
+  {id:'mail', name:'Почта', bundle:'com.apple.mail', color:'linear-gradient(135deg,#6ac4ff,#1a7cf0)', g:'✉', running:true, rule:null,
+    hosts:[['17.42.251.41:993','imap.mail.me.com'],['64.233.165.109:993','imap.gmail.com']]},
+];
+const appById = id => APPS.find(a => a.id === id);
+
+/* ============================== routing logic ============================== */
+const direct = () => S.routes.direct;
+const physUp = () => direct().phys !== 'none';
+function routeUp(r){ return r.kind === 'direct' ? physUp() : (r.up && physUp()); }
+function directInfo(){
+  const p = direct().phys;
+  if (p === 'ethernet') return {label:'Ethernet', iface:'en0', ip:'192.168.1.71', icon:'cable'};
+  if (p === 'none') return {label:'Нет сети', iface:'—', ip:'—', icon:'wifi_off'};
+  return {label:'Wi-Fi', iface:'en1', ip:'192.168.1.60', icon:'wifi'};
+}
+function rName(id){
+  if (id === 'default') return 'По умолчанию';
+  if (id === 'block') return 'Блокировать';
+  if (id === 'direct') return 'Напрямую';
+  return S.routes[id]?.name || id;
+}
+function rColor(id){
+  if (id === 'default') return 'var(--c-default)';
+  if (id === 'block') return 'var(--c-block)';
+  if (id === 'direct') return 'var(--c-direct)';
+  return S.routes[id]?.color || 'var(--c-default)';
+}
+function rIcon(id){
+  if (id === 'default') return 'branch';
+  if (id === 'block') return 'block';
+  if (id === 'direct') return directInfo().icon;
+  return 'shield';
+}
+const ksOn = () => S.settings.ksMode !== 'off';
+function defaultTarget(){
+  const a = S.routes.amnezia;
+  if (routeUp(a)) return {r:'amnezia', via:'default'};
+  if (physUp()) return {r:'direct', via:'default'};
+  return {block:'nonet', via:'default'};
+}
+function resolve(id, fb, depth){
+  if (id === 'block') return {block:'rule'};
+  if (id === 'default') return defaultTarget();
+  const r = S.routes[id];
+  if (routeUp(r)) return {r:id};
+  let out;
+  if (!physUp()) out = {block:'nonet'};
+  else if (fb === 'block' || depth > 2) out = {block:'unavail'};
+  else if (fb === 'default') out = {...defaultTarget(), fbUsed:'default'};
+  else { const inner = resolve(fb.slice(4), 'block', depth + 1); out = {...inner, fbUsed:'alt', unavail2: inner.unavail}; }
+  out.unavail = id;
+  return out;
+}
+function effective(app){
+  if (!S.enabled || !S.ext || S.onboarding) {
+    const d = defaultTarget();
+    return {...d, unmanaged:true};
+  }
+  const rule = app.rule || {route:'default', fb:'default'};
+  const res = resolve(rule.route, rule.fb, 0);
+  if (res.via === 'default' && !res.block && S.routes[res.r]?.kind !== 'vpn' && ksOn()) return {...res, r:undefined, block:'ks'};
+  return res;
+}
+function effText(res){
+  if (res.block === 'rule') return 'Заблокировано правилом';
+  if (res.block === 'nonet') return 'Нет сети';
+  if (res.block === 'ks') return 'VPN недоступен, kill switch → заблокировано';
+  if (res.block === 'unavail' && res.unavail2) return `${rName(res.unavail)} и запасной ${rName(res.unavail2)} недоступны → заблокировано`;
+  if (res.block === 'unavail') return `${rName(res.unavail)} недоступен → заблокировано`;
+  if (res.unavail) return `${rName(res.unavail)} недоступен → ${via(res.r)}`;
+  if (res.via === 'default') return `сейчас ${via(res.r)}`;
+  return via(res.r);
+}
+const via = id => id === 'direct' ? `напрямую через ${directInfo().label}` : `через ${rName(id)}`;
+const effColor = res => res.block ? 'var(--c-block)' : res.unavail ? 'var(--c-warn)' : rColor(res.r);
+const effRouteKey = res => res.block ? 'block' : res.r;
+const ruleRoute = app => app.rule ? app.rule.route : 'default';
+const fbDefault = route => (route === 'direct' ? S.settings.fbDirect : S.settings.fbVpn);
+
+function appState(){
+  if (!S.enabled || !S.ext || S.onboarding) return 'off';
+  const running = APPS.filter(a => a.running);
+  if (running.some(a => effective(a).block === 'ks')) return 'ks';
+  if (running.some(a => a.rule && effective(a).unavail)) return 'warn';
+  return 'ok';
+}
+function ksState(){
+  if (!ksOn()) return 'off';
+  if (S.enabled && S.ext && !routeUp(S.routes.amnezia) && physUp()) return 'blocks';
+  return 'armed';
+}
+const ksLabel = () => ({off:'Kill switch выкл', armed:'Kill switch ждёт', blocks:'Kill switch блокирует'})[ksState()];
+
+/* ============================== connections ============================== */
+let connSeq = 1;
+const rnd = (a, b) => a + Math.floor(Math.random() * (b - a));
+function spawnConn(app){
+  const res = effective(app);
+  const [dst, host] = app.hosts[rnd(0, app.hosts.length)];
+  const udp = (app.id === 'telegram' || app.id === 'opera' || app.id === 'zoom') && Math.random() < .25;
+  const c = {id:connSeq++, t:new Date(), app:app.id, dst, host, proto: udp ? 'UDP' : 'TCP',
+    route: effRouteKey(res), routeLabel: res.block ? 'Заблокировано' : rName(res.r),
+    state: res.block ? 'blocked' : 'active', bytes: res.block ? 0 : rnd(600, 9000), fresh:true, life: rnd(4, 26)};
+  S.conns.unshift(c);
+  if (S.conns.length > 260) S.conns.length = 260;
+}
+function abortConns(pred){
+  let n = 0;
+  S.conns.forEach(c => { if (c.state === 'active' && pred(c)) { c.state = 'aborted'; n++; } });
+  return n;
+}
+function refreshApp(appId){
+  const app = appById(appId);
+  if (S.settings.abortOnChange) abortConns(c => c.app === appId);
+  if (app.running) { spawnConn(app); spawnConn(app); }
+}
+function tick(){
+  if (S.paused) return;
+  S.conns.forEach(c => {
+    c.fresh = false;
+    if (c.state === 'active') { c.bytes += rnd(200, 14000); if (--c.life <= 0) c.state = 'closed'; }
+  });
+  const running = APPS.filter(a => a.running);
+  const n = Math.random() < .4 ? 2 : 1;
+  for (let i = 0; i < n; i++) spawnConn(running[rnd(0, running.length)]);
+  renderLive();
+}
+function fmtBytes(b){
+  if (!b) return '—';
+  if (b < 1024) return b + ' Б';
+  if (b < 1048576) return (b / 1024).toFixed(1) + ' КБ';
+  return (b / 1048576).toFixed(1) + ' МБ';
+}
+const fmtTime = d => d.toTimeString().slice(0, 8);
+
+/* ============================== UI helpers ============================== */
+const appIco = (a, cls='') => `<div class="appico ${cls}" style="background:${a.color}">${a.g}</div>`;
+function routeBtn(value, data, cls=''){
+  const na = !['default','block'].includes(value) && !routeUp(S.routes[value]);
+  return `<button class="popup ${cls}${na ? ' na' : ''}" ${data}>
+    <span class="rico" style="color:${rColor(value)};display:flex">${ic(rIcon(value), 's')}</span>
+    <span class="lbl">${esc(rName(value))}</span><span class="chev">${ic('chev','s')}</span></button>`;
+}
+function routeMenuItems(opts={}){
+  const items = [];
+  if (!opts.realOnly) items.push({key:'default', label:'По умолчанию', sub:'сейчас: ' + rName(defaultTarget().r || 'block')});
+  items.push({header:'НАПРЯМУЮ'});
+  const di = directInfo();
+  items.push({key:'direct', label:di.label === 'Нет сети' ? 'Wi-Fi / Ethernet' : di.label, sub: physUp() ? di.iface : 'нет сети', dim: !physUp()});
+  items.push({header:'VPN'});
+  S.vpnOrder.forEach(id => {
+    const r = S.routes[id];
+    items.push({key:id, label:r.name, sub: routeUp(r) ? r.iface : 'отключён', dim: !routeUp(r)});
+  });
+  if (!opts.realOnly) { items.push({sep:true}); items.push({key:'block', label:'Блокировать'}); }
+  return items.filter(it => !opts.exclude || it.key !== opts.exclude);
+}
+let menuCtx = null;
+function openMenu(anchor, items, value, cb){
+  closeMenu();
+  const scr = document.getElementById('screen');
+  const sr = scr.getBoundingClientRect(), ar = anchor.getBoundingClientRect();
+  const k = sr.width / 1280;
+  const m = document.createElement('div');
+  m.className = 'menu';
+  m.innerHTML = items.map(it => {
+    if (it.header) return `<div class="mh">${it.header}</div>`;
+    if (it.sep) return `<div class="ms"></div>`;
+    const color = it.color || rColor(it.key);
+    return `<div class="mi${it.dim ? ' dimmed' : ''}" data-pick="${it.key}">
+      <span class="ck">${it.key === value ? ic('check','s') : ''}</span>
+      ${it.noIcon ? '' : `<span class="rico" style="color:${it.dim ? 'var(--text3)' : color};display:flex">${ic(it.icon || rIcon(it.key),'s')}</span>`}
+      <span>${esc(it.label)}</span>${it.sub ? `<span class="sb">${esc(it.sub)}</span>` : ''}</div>`;
+  }).join('');
+  scr.appendChild(m);
+  let x = (ar.left - sr.left) / k, y = (ar.bottom - sr.top) / k + 4;
+  const mw = m.offsetWidth, mh = m.offsetHeight;
+  if (x + mw > 1270) x = 1270 - mw;
+  if (y + mh > 790) y = Math.max(30, (ar.top - sr.top) / k - mh - 4);
+  m.style.left = x + 'px'; m.style.top = y + 'px';
+  menuCtx = {el:m, anchor, cb};
+}
+function closeMenu(){ if (menuCtx) { menuCtx.el.remove(); menuCtx = null; } }
+
+/* ============================== render: menubar & popover ============================== */
+function stateColor(st){ return {ok:'var(--c-ok)', warn:'var(--c-warn)', ks:'var(--c-block)', off:'var(--text3)'}[st]; }
+function renderMenubar(){
+  const st = appState();
+  const now = new Date();
+  const days = ['Вс','Пн','Вт','Ср','Чт','Пт','Сб'];
+  const clock = `${days[now.getDay()]} ${now.getDate()} окт. ${now.toTimeString().slice(0,5)}`;
+  const net = physUp() ? (direct().phys === 'ethernet' ? 'cable' : 'wifi') : 'wifi_off';
+  return `<div class="menubar">
+    <span class="mitem b" style="font-size:15px;padding-top:0">&#63743;</span>
+    <span class="mitem b">${S.mainOpen || S.setOpen ? 'SplitPipe' : 'Finder'}</span>
+    <span class="mitem">${S.mainOpen || S.setOpen ? 'Правка' : 'Файл'}</span><span class="mitem">Вид</span><span class="mitem">Окно</span><span class="mitem">Справка</span>
+    <div class="right">
+      ${S.settings.menuBar ? `<span class="ico${S.popover ? ' on' : ''}" data-act="popover" title="SplitPipe">
+        <span style="display:flex;opacity:${st === 'off' ? .45 : 1}">${ic('pipe','', 'width:19px;height:19px')}</span>
+        ${st !== 'ok' && st !== 'off' ? `<span class="mbdot" style="background:${stateColor(st)}"></span>` : ''}</span>` : ''}
+      <span class="ico" style="color:#e6a23c" title="AmneziaVPN">${ic('shield','', S.routes.amnezia.up ? 'fill:currentColor;fill-opacity:.25' : 'opacity:.4')}</span>
+      <span class="ico">${ic('battery','', 'width:22px;height:18px')}</span>
+      <span class="ico">${ic(net)}</span>
+      <span class="ico">${ic('spot')}</span>
+      <span class="ico">${ic('ctrl')}</span>
+      <span class="clock">${clock}</span>
+    </div></div>`;
+}
+function problemBanners(){
+  const out = [];
+  if (!S.enabled || S.onboarding) return out;
+  if (!S.ext) { out.push({cls:'bad', text:'Сетевое расширение выключено — SplitPipe не управляет трафиком'}); return out; }
+  if (!physUp()) out.push({cls:'bad', text:'Нет сетевого подключения'});
+  S.vpnOrder.forEach(id => {
+    const r = S.routes[id];
+    if (routeUp(r) || !physUp()) return;
+    const users = APPS.filter(a => a.running && a.rule && a.rule.route === id);
+    if (!users.length) return;
+    const blocked = users.filter(a => effective(a).block).map(a => a.name);
+    const moved = users.filter(a => !effective(a).block).map(a => a.name + ' → ' + rName(effective(a).r));
+    let t = `${r.name} отключился`;
+    if (blocked.length) t += ` — ${blocked.join(', ')} ${blocked.length > 1 ? 'заблокированы' : 'заблокирован'}`;
+    if (moved.length) t += (blocked.length ? '; ' : ' — ') + moved.join(', ');
+    out.push({cls: blocked.length ? 'bad' : 'warn', text:t});
+  });
+  if (ksState() === 'blocks') {
+    const n = APPS.filter(a => a.running && effective(a).block === 'ks').length;
+    out.push({cls:'bad', text:`Kill switch: Amnezia VPN недоступна, заблокировано приложений: ${n}. «Напрямую» продолжают работать.`});
+  }
+  return out;
+}
+function statusText(){
+  const st = appState();
+  if (S.onboarding) return ['Не настроен', 'Завершите настройку'];
+  if (!S.enabled) return ['Выключен', 'Трафик идёт как обычно'];
+  if (!S.ext) return ['Расширение выключено', 'Нужно разрешение в настройках'];
+  const managed = APPS.filter(a => a.rule).length;
+  if (st === 'ks') return ['Kill switch блокирует', 'VPN недоступен'];
+  if (st === 'warn') return ['Есть проблемы', 'Маршрут недоступен'];
+  return ['Работает', `${managed} правил · ${S.vpnOrder.filter(id => routeUp(S.routes[id])).length} VPN подключено`];
+}
+function renderPopover(){
+  if (!S.popover) return '';
+  const st = appState(), [t, s] = statusText();
+  const fg = appById(S.foreground);
+  const ruled = APPS.filter(a => a.rule && a.id !== S.foreground).slice(0, 6);
+  const ksSt = ksState();
+  const ban = problemBanners();
+  return `<div class="popover" style="right:148px">
+    <div class="pv-head">${logo(30)}<div style="flex:1;min-width:0"><div class="t">SplitPipe</div>
+      <div class="s" style="color:${st === 'off' ? 'var(--text2)' : stateColor(st)}">● ${esc(t)} <span class="dim">· ${esc(s)}</span></div></div>
+      <button class="toggle${S.enabled ? ' on' : ''}" data-act="toggle-enabled"></button></div>
+    <div style="padding:0 6px 6px;display:flex;gap:6px;flex-wrap:wrap">
+      <span class="ks ${ksSt === 'blocks' ? 'blk' : ksSt === 'armed' ? 'arm' : ''}">${ic('lockshield','s')} ${ksLabel()}</span>
+      ${S.vpnOrder.filter(id => routeUp(S.routes[id])).map(id => `<span class="ks" style="color:${S.routes[id].color}">${ic('shield','s')} ${esc(S.routes[id].name)}</span>`).join('')}
+    </div>
+    ${ban.map(b => `<div class="pv-ban ${b.cls}">${ic(b.cls === 'bad' ? 'xc' : 'warnt','s', `color:${b.cls === 'bad' ? 'var(--c-block)' : 'var(--c-warn)'}`)}<span>${esc(b.text)}</span></div>`).join('')}
+    ${S.onboarding ? `<div class="pv-ban warn">${ic('infoc','s','color:var(--c-warn)')}<span>Завершите настройку, чтобы SplitPipe начал работать.</span></div>` : ''}
+    <div class="pv-sec">АКТИВНОЕ ПРИЛОЖЕНИЕ</div>
+    <div class="pv-fg"><div class="pv-row">${appIco(fg,'s')}<span class="n" style="font-weight:600">${esc(fg.name)}</span>${routeBtn(ruleRoute(fg), `data-act="route-menu" data-app="${fg.id}"`, 'cmp wide')}</div>
+      <div class="eff" style="color:${effective(fg).block || effective(fg).unavail ? effColor(effective(fg)) : 'var(--text2)'};margin:5px 0 0 28px">${esc(effText(effective(fg)))}</div></div>
+    <div class="pv-sec">ПРАВИЛА</div>
+    ${ruled.map(a => { const e = effective(a); return `<div class="pv-row">${appIco(a,'xs')}<span class="n">${esc(a.name)}${e.block || e.unavail ? ` <span style="color:${effColor(e)}">●</span>` : ''}</span>${routeBtn(a.rule.route, `data-act="route-menu" data-app="${a.id}"`, 'cmp wide')}</div>`; }).join('')}
+    <div class="pv-sep"></div>
+    <div class="pv-item" data-act="open-main"><span>Открыть SplitPipe</span><span class="dim">⌘O</span></div>
+    <div class="pv-item" data-act="open-settings"><span>Настройки…</span><span class="dim">⌘,</span></div>
+    <div class="pv-sep"></div>
+    <div class="pv-item" data-act="quit"><span>Выйти из SplitPipe</span><span class="dim">⌘Q</span></div>
+  </div>`;
+}
+
+/* ============================== render: main window ============================== */
+function renderMain(){
+  if (!S.mainOpen) return '';
+  const {x, y} = S.win.main;
+  if (S.onboarding) return `<div class="win" id="mainwin" style="left:${x}px;top:${y}px;width:720px;height:600px">
+      <div style="height:40px;display:flex;align-items:center;padding:0 12px;flex:none" data-drag="main"><div class="lights"><span data-act="close-main"></span><span></span><span></span></div></div>
+      ${renderOnboarding()}</div>`;
+  const st = appState(), [t, s] = statusText();
+  const rules = APPS.filter(a => a.rule).length;
+  const down = S.vpnOrder.some(id => !routeUp(S.routes[id]));
+  const active = S.conns.filter(c => c.state === 'active').length;
+  const diagIssues = S.diag && !S.diag.running ? S.diag.items.filter(i => i.st === 'fail' || i.st === 'warn').length : 0;
+  const nav = (id, icon, label, badge='') => `<div class="nav${S.view === id ? ' on' : ''}" data-act="view" data-v="${id}">${ic(icon)}<span>${label}</span>${badge}</div>`;
+  const stIcon = {ok:'check', warn:'excl', ks:'lockshield', off:'power'}[st];
+  return `<div class="win" id="mainwin" style="left:${x}px;top:${y}px">
+    <div class="mw">
+      <div class="sidebar">
+        <div class="top" data-drag="main"><div class="lights"><span data-act="close-main"></span><span></span><span></span></div></div>
+        ${nav('apps','grid','Приложения', `<span class="badge">${rules}</span>`)}
+        ${nav('routes','routes','Маршруты', down ? '<span class="badge dot"></span>' : `<span class="badge">${S.vpnOrder.length + 1}</span>`)}
+        ${nav('conns','list','Соединения', `<span class="badge" id="badge-conns">${active}</span>`)}
+        ${nav('stats','chart','Статистика')}
+        ${nav('diag','pulse','Диагностика', diagIssues ? `<span class="badge warn">${diagIssues}</span>` : '')}
+        <div class="sidefoot">
+          <div class="stcard"><div class="big" style="background:${st === 'off' ? 'var(--text3)' : stateColor(st)}">${ic(stIcon, '', 'color:#fff;stroke-width:2')}</div>
+            <div style="flex:1;min-width:0"><div class="t">${esc(t)}</div><div class="s">${esc(s)}</div></div>
+            <button class="toggle sm${S.enabled ? ' on' : ''}" data-act="toggle-enabled"></button></div>
+          <div style="margin-top:9px" class="ks ${ksState() === 'blocks' ? 'blk' : ksState() === 'armed' ? 'arm' : ''}" data-act="open-settings" data-tab="ks">${ic('lockshield','s')} ${ksLabel()}</div>
+        </div>
+      </div>
+      <div class="content">${renderView()}</div>
+    </div></div>`;
+}
+function topBanners(){
+  const b = [];
+  if (!S.ext) b.push(`<div class="banner bad">${ic('xc','l','color:var(--c-block)')}<div class="bt"><b>Сетевое расширение выключено</b><div>SplitPipe не управляет трафиком: все приложения идут по системному маршруту.</div></div><button class="btn" data-act="sys-ext">Открыть настройки</button></div>`);
+  else if (!S.enabled) b.push(`<div class="banner warn">${ic('power','l','color:var(--c-warn)')}<div class="bt"><b>SplitPipe выключен</b><div>Правила сохранены, но не применяются.</div></div><button class="btn primary" data-act="toggle-enabled">Включить</button></div>`);
+  else problemBanners().forEach(x => b.push(`<div class="banner ${x.cls}">${ic(x.cls === 'bad' ? 'xc' : 'warnt','l', `color:${x.cls === 'bad' ? 'var(--c-block)' : 'var(--c-warn)'}`)}<div class="bt"><b>${esc(x.text)}</b></div><button class="btn" data-act="view" data-v="routes">Маршруты</button></div>`));
+  return b.join('');
+}
+function renderView(){
+  if (S.view === 'apps') return renderApps();
+  if (S.view === 'routes') return renderRoutes();
+  if (S.view === 'conns') return renderConns();
+  if (S.view === 'stats') return renderStats();
+  return renderDiag();
+}
+
+/* ---------- apps ---------- */
+function filteredApps(){
+  const q = S.search.trim().toLowerCase();
+  return APPS.filter(a => {
+    if (S.filter === 'running' && !a.running) return false;
+    if (S.filter === 'rules' && !a.rule) return false;
+    if (q && !a.name.toLowerCase().includes(q) && !a.bundle.includes(q)) return false;
+    return true;
+  });
+}
+function appRow(a){
+  const res = effective(a), route = ruleRoute(a);
+  const showEff = res.block || res.unavail;
+  return `<div class="row${S.selected === a.id ? ' on' : ''}" data-act="select" data-app="${a.id}">
+    ${appIco(a)}
+    <div class="nm"><div class="a">${esc(a.name)}${a.running ? '<span class="run" title="запущено"></span>' : ''}</div>
+      <div class="b">${esc(a.bundle)}${a.rule ? '' : ' · без правила'}</div>
+      ${showEff && !res.unmanaged ? `<div class="eff" style="color:${res.block || res.unavail ? effColor(res) : 'var(--text2)'}">${res.block || res.unavail ? ic(res.block ? 'block' : 'warnt','s') : ''}${esc(effText(res))}</div>` : ''}</div>
+    ${routeBtn(route, `data-act="route-menu" data-app="${a.id}"`, 'wide')}
+  </div>`;
+}
+function renderAppsList(){
+  const list = filteredApps();
+  const anyRules = APPS.some(a => a.rule);
+  let h = '';
+  if (!anyRules) h += `<div class="empty"><div class="em">${ic('routes','l')}</div><div><div style="font-weight:600">Правил пока нет</div><div class="dim" style="font-size:12px">Выберите приложение, чтобы направить его трафик мимо VPN или через другой VPN.</div></div></div>`;
+  if (!list.length) h += `<div class="dim" style="padding:40px;text-align:center">Ничего не найдено</div>`;
+  const running = list.filter(a => a.running), other = list.filter(a => !a.running);
+  if (running.length) h += `<div class="listhead">Запущенные</div>` + running.map(appRow).join('');
+  if (other.length) h += `<div class="listhead">Не запущены</div>` + other.map(appRow).join('');
+  return h;
+}
+function renderApps(){
+  const sel = appById(S.selected);
+  return `<div class="toolbar" data-drag="main"><div><h1>Приложения</h1><div class="sub">${APPS.filter(a => a.rule).length} правил · ${APPS.filter(a => a.running).length} запущено</div></div>
+      <div class="sp"></div>
+      <div class="seg">${[['running','Запущенные'],['rules','С правилами'],['all','Все']].map(([k, l]) => `<button class="${S.filter === k ? 'on' : ''}" data-act="filter" data-v="${k}">${l}</button>`).join('')}</div>
+      <label class="search">${ic('search','s')}<input id="q" placeholder="Поиск" value="${esc(S.search)}"></label></div>
+    <div class="split"><div class="body"><div>${topBanners()}</div><div id="applist">${renderAppsList()}</div></div>
+    ${sel ? `<div class="inspector" id="insp">${renderInspector(sel)}</div>` : ''}</div>`;
+}
+function renderInspector(a){
+  const res = effective(a), route = ruleRoute(a);
+  const fb = a.rule ? a.rule.fb : fbDefault(route);
+  const fbApplies = !['default','block'].includes(route);
+  const alt = fb.startsWith('alt:') ? fb.slice(4) : null;
+  const radio = (v, title, hint='', extra='') => `<div class="radio${(v === 'alt' ? !!alt : fb === v) ? ' on' : ''}${fbApplies ? '' : ' dis'}" data-act="fb" data-v="${v}" data-app="${a.id}"><div class="rb"></div><div style="flex:1"><div>${title}</div>${hint ? `<div class="hint">${hint}</div>` : ''}${extra}</div></div>`;
+  return `<div class="isec"><div class="ihead">${appIco(a,'l')}<div style="min-width:0"><div class="n">${esc(a.name)}</div><div class="dim mono" style="font-size:11px">${esc(a.bundle)}</div>
+      <div style="font-size:11px;margin-top:3px" class="dim">${a.running ? '<span class="run"></span> запущено' : 'не запущено'}</div></div></div></div>
+    <div class="isec"><h3>Маршрут</h3>${routeBtn(route, `data-act="route-menu" data-app="${a.id}"`, 'full')}
+      ${a.rule ? `<button class="btn ghost" style="margin-top:6px;padding-left:0" data-act="rule-reset" data-app="${a.id}">Удалить правило</button>` : '<div class="dim" style="font-size:11.5px;margin-top:6px">Правила нет — приложение идёт по системному маршруту.</div>'}</div>
+    <div class="isec"><h3>Если маршрут недоступен</h3>
+      ${fbApplies ? '' : `<div class="dim" style="font-size:11.5px;margin-bottom:6px">Не применяется: «${rName(route)}» всегда доступен.</div>`}
+      ${radio('block','Блокировать','Без утечек: трафик не уходит мимо выбранного маршрута.')}
+      ${radio('default','Использовать маршрут по умолчанию', S.amneziaKS ? 'Kill switch Amnezia включён: фактически «через VPN или заблокировано».' : 'Трафик пойдёт так, как решит система.')}
+      ${radio('alt','Запасной маршрут','', alt || fb === 'alt' ? `<div style="margin-top:6px">${routeBtn(alt, `data-act="alt-menu" data-app="${a.id}"`, 'full cmp')}</div>` : '')}
+    </div>
+    <div class="isec"><h3>Сейчас</h3><div class="effbox"><span style="color:${effColor(res)};display:flex;margin-top:1px">${ic(res.block ? 'block' : rIcon(res.r))}</span>
+      <div><div style="font-weight:600;color:${effColor(res)}">${res.block ? 'Заблокировано' : esc(rName(res.r))}</div><div class="dim" style="font-size:11.5px">${res.unmanaged ? 'SplitPipe не управляет трафиком' : esc(effText(res))}</div></div></div></div>
+    <div class="isec" style="border-bottom:none"><h3 style="display:flex">Соединения<span style="margin-left:auto"></span></h3><div id="insp-conns">${inspConns(a)}</div>
+      <button class="btn" style="margin-top:10px" data-act="abort-app" data-app="${a.id}">${ic('cut','s')} Оборвать соединения</button></div>`;
+}
+function inspConns(a){
+  const cs = S.conns.filter(c => c.app === a.id).slice(0, 6);
+  if (!cs.length) return `<div class="dim" style="font-size:11.5px">${a.running ? 'Пока нет соединений' : 'Приложение не запущено'}</div>`;
+  return cs.map(c => `<div class="miniconn"><span class="mono" style="${c.state === 'aborted' ? 'text-decoration:line-through;opacity:.5' : ''}">${esc(c.dst)}</span>${routeTag(c)}</div>`).join('');
+}
+function routeTag(c){
+  if (c.state === 'aborted') return `<span class="tag" style="background:var(--hover);color:var(--text2)">оборвано</span>`;
+  const col = c.route === 'block' ? 'var(--c-block)' : rColor(c.route);
+  return `<span class="tag" style="background:color-mix(in srgb,${col} 15%,transparent);color:${col}">${c.route === 'block' ? ic('block','s') : ''}${esc(c.routeLabel)}</span>`;
+}
+
+/* ---------- routes ---------- */
+function routeCard(id){
+  const r = S.routes[id], isD = id === 'direct', up = routeUp(r);
+  const di = directInfo();
+  const name = isD ? 'Напрямую' : r.name;
+  const users = APPS.filter(a => a.rule && a.rule.route === id);
+  const chk = S.checks[id];
+  let extIp = up ? (isD ? '203.0.113.10' : r.ext) : '—';
+  if (chk?.state === 'ok') extIp = chk.ip;
+  let foot = `${users.length} ${plural(users.length, 'приложение', 'приложения', 'приложений')}`;
+  if (!up && users.length) {
+    const bl = users.filter(a => effective(a).block).length;
+    foot = `отключён · ${bl} ${plural(bl,'приложение','приложения','приложений')} заблокировано` + (users.length - bl ? `, ${users.length - bl} на запасном маршруте` : '');
+  }
+  const status = up ? `<span class="pill" style="color:var(--c-ok);background:color-mix(in srgb,var(--c-ok) 13%,transparent)"><span class="d"></span>${isD ? 'подключено' : 'подключён'}</span>`
+    : `<span class="pill" style="color:var(--text2);background:var(--hover)"><span class="d"></span>${isD ? 'нет сети' : 'отключён'}</span>`;
+  const nameHtml = S.renaming === id ? `<input id="rename" value="${esc(name)}">` : `<span class="${isD ? '' : 'rn'}" ${isD ? '' : `data-act="rename" data-r="${id}" title="Переименовать"`}>${esc(name)}</span>`;
+  return `<div class="rcard${up ? '' : ' down'}">
+    <div class="hd"><div class="ri" style="background:${up ? rColor(id) : 'var(--text3)'}">${ic(rIcon(id))}</div>
+      <div class="ti">${nameHtml}<div class="dim" style="font-size:11px;font-weight:400">${isD ? di.label + ' · основное подключение' : esc(r.client)}${r.holdsDefault && up ? ' · держит маршрут по умолчанию' : ''}</div></div>${status}</div>
+    <div class="kv"><span class="k">Интерфейс</span><span class="mono">${isD ? di.iface : up ? r.iface : '—'}</span>
+      <span class="k">Локальный IP</span><span class="mono">${isD ? di.ip : up ? r.ip : '—'}</span>
+      <span class="k">Внешний IP</span><span class="mono"${chk?.state === 'ok' ? ' style="color:var(--c-ok)"' : ''}>${extIp}</span>
+      <span class="k">Проверка</span><span style="display:flex;align-items:center;gap:5px">${checkStatus(id, chk)}</span></div>
+    <div class="ft"><span style="flex:1">${foot}</span>
+      <div style="display:flex">${users.slice(0, 5).map(a => `<span style="margin-left:-4px" title="${esc(a.name)}">${appIco(a,'xs')}</span>`).join('')}</div>
+      <button class="btn" data-act="check" data-r="${id}" title="Отправить запрос через этот маршрут: узнать внешний IP и задержку" ${chk?.state === 'run' ? 'disabled' : ''}>${chk?.state === 'run' ? '<span class="spin" style="width:11px;height:11px"></span>' : ic('refresh','s')} Проверить связь</button></div>
+  </div>`;
+}
+function checkStatus(id, chk){
+  const iface = id === 'direct' ? directInfo().iface : S.routes[id].iface;
+  if (chk?.state === 'run') return `<span class="spin" style="width:11px;height:11px"></span><span class="dim">запрос через ${iface}…</span>`;
+  if (chk?.state === 'ok') return `<span style="color:var(--c-ok);display:flex">${ic('check','s','stroke-width:2.2')}</span><span>работает · ${chk.ms} мс</span><span class="dim3">· ${ago(chk.at)}</span>`;
+  if (chk?.state === 'fail') return `<span style="color:var(--c-block);display:flex">${ic('block','s')}</span><span style="color:var(--c-block)">нет ответа</span><span class="dim3">· ${ago(chk.at)}</span>`;
+  return `<span class="dim3">не проверялось</span>`;
+}
+const ago = t => { const s = Math.round((Date.now() - t) / 1000); return s < 10 ? 'только что' : s < 60 ? `${s} с назад` : `${Math.round(s / 60)} мин назад`; };
+const plural = (n, a, b, c) => { const m10 = n % 10, m100 = n % 100; return m10 === 1 && m100 !== 11 ? a : m10 >= 2 && m10 <= 4 && (m100 < 10 || m100 >= 20) ? b : c; };
+function renderRoutes(){
+  return `<div class="toolbar" data-drag="main"><div><h1>Маршруты</h1><div class="sub">Куда может идти трафик приложений</div></div><div class="sp"></div>
+      <button class="btn" data-act="check-all" title="Проверить связь через каждый маршрут">${ic('refresh','s')} Проверить все маршруты</button></div>
+    <div class="body">${topBanners()}
+      ${S.amneziaKS ? `<div class="banner ok">${ic('lockshield','l','color:var(--c-ok)')}<div class="bt"><b>Kill switch Amnezia обнаружен — обход для SplitPipe настроен</b><div>Приложения «Напрямую» выходят через ${directInfo().label}, остальной трафик Amnezia по-прежнему защищает.</div></div>${ic('checkc','l','color:var(--c-ok)')}</div>` : ''}
+      <div class="listhead">Напрямую</div><div class="rgrid">${routeCard('direct')}</div>
+      <div class="listhead">VPN</div><div class="rgrid">${S.vpnOrder.map(routeCard).join('')}</div>
+      <div class="dim" style="font-size:11.5px;padding:4px 18px 18px">«Проверить связь» отправляет запрос к ${esc(S.settings.echo.replace('https://',''))} через интерфейс маршрута и показывает внешний IP и задержку. VPN определяются автоматически по интерфейсам utun; нажмите на название, чтобы переименовать.</div>
+    </div>`;
+}
+
+/* ---------- connections ---------- */
+function connRows(){
+  let cs = S.conns;
+  if (S.connFilter === 'blocked') cs = cs.filter(c => c.route === 'block');
+  else if (S.connFilter !== 'all') cs = cs.filter(c => c.route === S.connFilter);
+  cs = cs.slice(0, 120);
+  const row = c => {
+    const a = appById(c.app);
+    return `<tr class="${c.state === 'aborted' ? 'ab' : ''}${c.fresh ? ' new' : ''}"><td class="mono dim">${fmtTime(c.t)}</td>
+      <td><span style="display:inline-flex;gap:6px;align-items:center">${appIco(a,'xs')}${esc(a.name)}</span></td>
+      <td><span class="mono">${esc(c.dst)}</span> <span class="dim3" style="font-size:11px">${esc(c.host)}</span></td>
+      <td class="dim">${c.proto}</td><td>${routeTag(c)}</td>
+      <td class="num">${c.state === 'blocked' ? '—' : fmtBytes(c.bytes)}${c.state === 'active' ? ' <span style="color:var(--c-ok)">●</span>' : ''}</td></tr>`;
+  };
+  if (!cs.length) return `<tr><td colspan="6" class="dim" style="text-align:center;padding:40px">Нет соединений</td></tr>`;
+  if (!S.grouped) return cs.map(row).join('');
+  const groups = {};
+  cs.forEach(c => (groups[c.app] = groups[c.app] || []).push(c));
+  return Object.entries(groups).map(([id, list]) => {
+    const a = appById(id), col = S.collapsed[id];
+    const total = list.reduce((s, c) => s + c.bytes, 0), act = list.filter(c => c.state === 'active').length;
+    return `<tr class="grp" data-act="collapse" data-app="${id}"><td colspan="6"><span style="display:inline-flex;gap:8px;align-items:center">
+      <span style="display:inline-block;transform:rotate(${col ? 0 : 90}deg);transition:transform .15s">›</span>${appIco(a,'xs')}${esc(a.name)}
+      <span class="dim" style="font-weight:400">${list.length} · активных ${act} · ${fmtBytes(total)}</span></span>
+      <button class="btn" style="float:right;padding:1px 8px;font-size:11.5px" data-act="abort-app" data-app="${id}">Оборвать</button></td></tr>` + (col ? '' : list.map(row).join(''));
+  }).join('');
+}
+function renderConns(){
+  const opts = [['all','Все маршруты'],['direct','Напрямую'],...S.vpnOrder.map(id => [id, S.routes[id].name]),['block','Заблокированные']];
+  const cur = opts.find(o => o[0] === S.connFilter) || opts[0];
+  return `<div class="toolbar" data-drag="main"><div><h1>Соединения</h1><div class="sub" id="conn-sub">${S.conns.filter(c => c.state === 'active').length} активных</div></div><div class="sp"></div>
+      <button class="popup" data-act="conn-filter"><span class="lbl">${esc(cur[1])}</span><span class="chev">${ic('chev','s')}</span></button>
+      <button class="iconbtn${S.grouped ? ' on' : ''}" data-act="group" title="Группировать по приложению">${ic('grid')}</button>
+      <button class="iconbtn${S.paused ? ' on' : ''}" data-act="pause" title="${S.paused ? 'Продолжить' : 'Пауза'}">${ic(S.paused ? 'play' : 'pause')}</button></div>
+    <div class="body">${topBanners()}<table class="ct"><thead><tr><th style="width:70px">Время</th><th style="width:150px">Приложение</th><th>Адрес</th><th style="width:44px">Прот.</th><th style="width:150px">Маршрут</th><th style="width:84px;text-align:right">Трафик</th></tr></thead>
+      <tbody id="conn-body">${connRows()}</tbody></table></div>`;
+}
+
+/* ---------- statistics ---------- */
+/* Те же данные, что будет собирать расширение: по интервалам времени, приложениям и маршрутам — ↓/↑ байты,
+   число соединений и заблокированных. «По умолчанию» учитывается по фактическому маршруту (обычно VPN). */
+const STAT_PERIODS = [['hour','Час'],['today','Сегодня'],['week','7 дней'],['month','30 дней']];
+function statSeed(n){ let x = Math.sin(n * 12.9898) * 43758.5453; return x - Math.floor(x); }
+function statsData(){
+  const p = S.statsPeriod;
+  const now = new Date();
+  const buckets = p === 'hour' ? 12 : p === 'today' ? now.getHours() + 1 : p === 'week' ? 7 : 30;
+  const scale = p === 'hour' ? 0.08 : p === 'today' ? 1 : p === 'week' ? 7.5 : 26;
+  const label = i => p === 'hour' ? `${String(Math.floor(i * 5)).padStart(2,'0')}'` : p === 'today' ? `${i}:00`
+    : (() => { const d = new Date(now); d.setDate(d.getDate() - (buckets - 1 - i)); return `${d.getDate()}.${String(d.getMonth() + 1).padStart(2,'0')}`; })();
+  const effRoute = a => { const r = a.rule ? a.rule.route : 'default'; return r === 'default' ? 'amnezia' : r; };
+  const weight = {opera:9, telegram:3.2, safari:4.1, slack:1.6, jira:0.9, spotify:5.5, zoom:2.4, mail:0.5, chrome:3.8, notion:0.7};
+  const rows = [];
+  APPS.forEach((a, ai) => {
+    const w = weight[a.id] ?? 0.4 + statSeed(ai) * 1.2;
+    const route = effRoute(a);
+    if (route === 'block') { rows.push({app:a.id, route:'block', bucket:buckets - 1, down:0, up:0, flows:0, blocked:Math.round(40 * scale * statSeed(ai + 7))}); return; }
+    for (let i = 0; i < buckets; i++) {
+      const hour = p === 'today' ? i : 12;
+      const day = p === 'today' || p === 'hour' ? (hour >= 9 && hour <= 23 ? 1 : 0.15) : 1;
+      const k = w * day * (0.4 + statSeed(ai * 97 + i)) * (p === 'hour' ? 1 : 1) * 1048576 * 6 * (p === 'week' || p === 'month' ? 14 : 1) * (p === 'hour' ? 0.12 : 1);
+      // Часть трафика ушла по запасному маршруту, пока основной был недоступен.
+      const r = route === 'work' && statSeed(ai + i) > 0.85 ? 'amnezia' : route;
+      rows.push({app:a.id, route:r, bucket:i, down:k, up:k * (0.06 + statSeed(ai + i * 3) * 0.12),
+        flows:Math.round((4 + 30 * statSeed(ai * 13 + i)) * w), blocked: a.rule && a.rule.fb === 'block' && statSeed(ai * 5 + i) > 0.9 ? Math.round(3 + 10 * statSeed(i)) : 0});
+    }
+  });
+  return {buckets, label, rows};
+}
+function renderStats(){
+  const {buckets, label, rows} = statsData();
+  const sum = (list, f) => list.reduce((s, x) => s + f(x), 0);
+  const total = sum(rows, r => r.down + r.up), down = sum(rows, r => r.down), up = sum(rows, r => r.up);
+  const flows = sum(rows, r => r.flows), blocked = sum(rows, r => r.blocked);
+  const routeIds = ['direct', ...S.vpnOrder].filter(id => rows.some(r => r.route === id));
+  const byRoute = Object.fromEntries(routeIds.map(id => [id, rows.filter(r => r.route === id)]));
+  const rTotal = id => sum(byRoute[id], r => r.down + r.up);
+  const vpnTotal = sum(S.vpnOrder.filter(id => byRoute[id]), rTotal);
+  const pct = x => total ? Math.round(x / total * 100) + '%' : '—';
+  const fmt = b => b >= 1073741824 ? (b / 1073741824).toFixed(1) + ' ГБ' : fmtBytes(Math.round(b));
+  // график: столбики по интервалам, сложенные по маршрутам
+  const per = Array.from({length: buckets}, (_, i) => routeIds.map(id => sum(byRoute[id].filter(r => r.bucket === i), r => r.down + r.up)));
+  const max = Math.max(1, ...per.map(v => v.reduce((a, b) => a + b, 0)));
+  const W = 760, Hh = 170, padL = 44, padB = 18, cw = (W - padL) / buckets, bw = Math.max(3, cw * 0.62);
+  const grid = [0, .5, 1].map(f => { const y = (Hh - padB) * (1 - f) + .5; return `<line class="gl" x1="${padL}" x2="${W}" y1="${y}" y2="${y}"/><text class="ax" x="${padL - 6}" y="${y + 3}" text-anchor="end">${f ? fmt(max * f) : '0'}</text>`; }).join('');
+  const bars = per.map((vals, i) => { let y = Hh - padB; return vals.map((v, j) => { const h = v / max * (Hh - padB - 6); y -= h;
+      return h > 0 ? `<rect class="b" x="${padL + i * cw + (cw - bw) / 2}" y="${y}" width="${bw}" height="${h}" rx="1.5" fill="${rColor(routeIds[j])}"><title>${esc(label(i))} · ${esc(rName(routeIds[j]))}: ${fmt(v)}</title></rect>` : ''; }).join(''); }).join('');
+  const step = Math.ceil(buckets / 8);
+  const xl = Array.from({length: buckets}, (_, i) => i % step === 0 ? `<text class="ax" x="${padL + i * cw + cw / 2}" y="${Hh - 4}" text-anchor="middle">${esc(label(i))}</text>` : '').join('');
+  // приложения
+  const apps = APPS.map(a => { const rs = rows.filter(r => r.app === a.id);
+    return {a, total: sum(rs, r => r.down + r.up), down: sum(rs, r => r.down), up: sum(rs, r => r.up), flows: sum(rs, r => r.flows), blocked: sum(rs, r => r.blocked),
+      routes: routeIds.map(id => [id, sum(rs.filter(r => r.route === id), r => r.down + r.up)]).filter(x => x[1] > 0)}; })
+    .filter(x => x.total > 0 || x.blocked > 0).sort((x, y) => y.total - x.total);
+  const top = apps[0]?.total || 1;
+  const tile = (icon, k, v, sub, col='') => `<div class="stile"><div class="k">${ic(icon,'s', col ? `color:${col}` : '')}${k}</div><div class="v">${v}</div><div class="s">${sub}</div></div>`;
+  const per1 = {hour:'за последний час', today:'за сегодня', week:'за 7 дней', month:'за 30 дней'}[S.statsPeriod];
+  return `<div class="toolbar" data-drag="main"><div><h1>Статистика</h1><div class="sub">Трафик через SplitPipe ${per1}</div></div><div class="sp"></div>
+      <div class="seg">${STAT_PERIODS.map(([id, t]) => `<button class="${S.statsPeriod === id ? 'on' : ''}" data-act="stats-period" data-p="${id}">${t}</button>`).join('')}</div></div>
+    <div class="body">
+      <div class="stiles">
+        ${tile('routes', 'Весь трафик', fmt(total), `↓ ${fmt(down)} · ↑ ${fmt(up)}`)}
+        ${tile(directInfo().icon, 'Напрямую', pct(byRoute.direct ? rTotal('direct') : 0), fmt(byRoute.direct ? rTotal('direct') : 0), 'var(--c-direct)')}
+        ${tile('shield', 'Через VPN', pct(vpnTotal), fmt(vpnTotal), S.routes.amnezia.color)}
+        ${tile('list', 'Соединений', flows.toLocaleString('ru-RU'), blocked ? `<span style="color:var(--c-block)">заблокировано ${blocked}</span>` : 'без блокировок')}
+      </div>
+      <div class="scard"><div class="hd"><b>Трафик по маршрутам</b><div class="sp" style="flex:1"></div>
+        <div class="legend">${routeIds.map(id => `<span><i style="background:${rColor(id)}"></i>${esc(rName(id))}</span>`).join('')}</div></div>
+        <svg class="chart" viewBox="0 0 ${W} ${Hh}" preserveAspectRatio="none">${grid}${bars}${xl}</svg></div>
+      <div class="scard"><div class="hd"><b>Маршруты</b></div>
+        ${routeIds.map(id => { const rs = byRoute[id], t = rTotal(id);
+          return `<div class="rrow">${ic(rIcon(id),'', `color:${rColor(id)}`)}<span>${esc(rName(id))}</span>
+            <div class="sbar"><div style="width:${t / total * 100}%;background:${rColor(id)}"></div></div>
+            <span class="num">${fmt(t)} <span class="dim3">${pct(t)}</span></span><span class="num dim">${sum(rs, r => r.flows)} соед.</span></div>`; }).join('')}
+      </div>
+      <div class="scard"><div class="hd"><b>Приложения</b><span class="dim" style="font-size:11.5px">по трафику ${per1}</span></div>
+        <table class="st"><thead><tr><th>Приложение</th><th style="width:170px">Маршруты</th><th style="width:220px">Трафик</th><th style="width:70px;text-align:right">↓ / ↑</th><th style="width:64px;text-align:right">Соед.</th><th style="width:74px;text-align:right">Заблок.</th></tr></thead>
+        <tbody>${apps.map(x => `<tr><td><span style="display:inline-flex;gap:8px;align-items:center">${appIco(x.a,'xs')}${esc(x.a.name)}</span></td>
+          <td>${x.routes.length ? x.routes.map(([id]) => `<span class="tag" style="background:color-mix(in srgb,${rColor(id)} 15%,transparent);color:${rColor(id)};margin-right:4px">${esc(rName(id))}</span>`).join('') : `<span class="tag" style="background:color-mix(in srgb,var(--c-block) 15%,transparent);color:var(--c-block)">${ic('block','s')}Блокировать</span>`}</td>
+          <td><div class="share"><div class="sbar">${x.routes.map(([id, v]) => `<div style="width:${v / top * 100}%;background:${rColor(id)}"></div>`).join('')}</div><span class="num" style="min-width:62px">${x.total ? fmt(x.total) : '—'}</span></div></td>
+          <td class="num dim" style="font-size:11px">${x.total ? `${Math.round(x.down / x.total * 100)}/${Math.round(x.up / x.total * 100)}%` : '—'}</td>
+          <td class="num">${x.flows || '—'}</td><td class="num" style="color:${x.blocked ? 'var(--c-block)' : 'var(--text3)'}">${x.blocked || '—'}</td></tr>`).join('')}</tbody></table></div>
+      <div class="dim" style="font-size:11.5px;padding:6px 18px 18px">Считает расширение: учитываются соединения, которые идут через SplitPipe. «По умолчанию» — по фактическому маршруту. Хранится 30 дней; сбросить — в Настройках → Дополнительно.</div>
+    </div>`;
+}
+
+/* ---------- diagnostics ---------- */
+function diagItems(){
+  const it = [];
+  const di = directInfo();
+  it.push(S.ext ? {st:'ok', t:'Сетевое расширение', d:'Работает, перехватывает соединения приложений'} : {st:'fail', t:'Сетевое расширение', d:'Выключено пользователем в системных настройках', fix:'sys-ext', fixL:'Открыть настройки'});
+  it.push(S.helper ? {st:'ok', t:'Фоновый помощник', d:'Работает, правила pf актуальны'} : {st:'fail', t:'Фоновый помощник', d:'Не запущен'});
+  const a = S.routes.amnezia;
+  it.push(routeUp(a) ? {st:'ok', t:'Amnezia VPN', d:`Подключена (${a.iface}), держит маршрут по умолчанию`} : {st:'warn', t:'Amnezia VPN', d:'Отключена — «По умолчанию» сейчас идёт напрямую', fix:'view-routes', fixL:'Маршруты'});
+  it.push(S.amneziaKS ? {st:'ok', t:'Kill switch Amnezia', d:'Включён, обход для SplitPipe установлен (pf-anchor com.apple/splitpipe)'} : {st:'info', t:'Kill switch Amnezia', d:'Выключен — обход не нужен'});
+  it.push(physUp() ? {st:'ok', t:`Напрямую (${di.label})`, d:'Внешний IP 203.0.113.10 · ' + rnd(18, 40) + ' мс'} : {st:'fail', t:'Напрямую', d:'Нет сетевого подключения'});
+  S.vpnOrder.forEach(id => { const r = S.routes[id]; it.push(routeUp(r) ? {st:'ok', t:r.name, d:`Внешний IP ${r.ext} · ${rnd(30, 90)} мс`} : {st:'fail', t:r.name, d:'Отключён', fix:'view-routes', fixL:'Маршруты'}); });
+  const ks = S.settings.ksMode;
+  it.push({st: ks === 'off' ? 'info' : 'ok', t:'Глобальный kill switch', d: ks === 'off' ? 'Выключен' : ks === 'drop' ? 'Включён: при обрыве VPN' : 'Включён: всегда', fix: ks === 'off' ? 'set-ks' : null, fixL:'Настроить'});
+  it.push(S.settings.dns === 'system' ? {st:'warn', t:'DNS', d:'10.8.1.1 (через VPN) — приложения «Напрямую» тоже резолвят адреса через VPN', fix:'set-dns', fixL:'Исправить'} : {st:'ok', t:'DNS', d:'Приложения «Напрямую» резолвят через ' + ({provider:'DNS провайдера', custom:S.settings.dnsCustom, doh:'DNS-over-HTTPS'})[S.settings.dns]});
+  return it;
+}
+function runDiag(){
+  const items = diagItems();
+  S.diag = {running:true, items: items.map(i => ({...i, done:false}))};
+  render();
+  items.forEach((_, i) => setTimeout(() => {
+    if (!S.diag) return;
+    S.diag.items[i].done = true;
+    if (i === items.length - 1) S.diag.running = false;
+    render();
+  }, 380 * (i + 1)));
+}
+function renderDiag(){
+  const d = S.diag;
+  const stIcon = s => ({ok:ic('checkc','l','color:var(--c-ok)'), warn:ic('warnt','l','color:var(--c-warn)'), fail:ic('xc','l','color:var(--c-block)'), info:ic('infoc','l','color:var(--text3)')})[s];
+  let summary = '';
+  if (d && !d.running) {
+    const f = d.items.filter(i => i.st === 'fail').length, w = d.items.filter(i => i.st === 'warn').length;
+    summary = f || w ? `<div class="banner ${f ? 'bad' : 'warn'}">${ic(f ? 'xc' : 'warnt','l', `color:${f ? 'var(--c-block)' : 'var(--c-warn)'}`)}<div class="bt"><b>${f ? `Проблем: ${f}` : ''}${f && w ? ', ' : ''}${w ? `предупреждений: ${w}` : ''}</b><div>Нажмите «Исправить» рядом с проблемой.</div></div></div>`
+      : `<div class="banner ok">${ic('checkc','l','color:var(--c-ok)')}<div class="bt"><b>Всё в порядке</b></div></div>`;
+  }
+  return `<div class="toolbar" data-drag="main"><div><h1>Диагностика</h1><div class="sub">Проверка расширения, маршрутов и DNS</div></div><div class="sp"></div>
+      <button class="btn primary" data-act="diag" ${d?.running ? 'disabled' : ''}>${d?.running ? '<span class="spin" style="width:11px;height:11px;border-top-color:#fff"></span> Проверяю…' : (d ? 'Проверить снова' : 'Запустить проверки')}</button></div>
+    <div class="body">${summary}
+      ${d ? `<div class="dlist">${d.items.map(i => `<div class="ditem"><div class="st">${i.done ? stIcon(i.st) : '<span class="spin"></span>'}</div>
+          <div class="tx"><div class="t">${esc(i.t)}</div><div class="d">${i.done ? esc(i.d) : 'проверяю…'}</div></div>
+          ${i.done && i.fix ? `<button class="btn" data-act="${i.fix}">${i.fixL}</button>` : ''}</div>`).join('')}</div>`
+        : `<div style="padding:70px 30px;text-align:center" class="dim"><div style="color:var(--accent);margin-bottom:10px">${ic('pulse','','width:40px;height:40px')}</div>Проверим расширение, каждый маршрут и его внешний IP, kill switch и DNS.</div>`}
+    </div>`;
+}
+
+/* ---------- onboarding ---------- */
+const ONB = [
+  {t:'Сетевое расширение', d:'Перехватывает соединения приложений и направляет их по выбранному маршруту.', a:'Открыть настройки', wait:'Включите SplitPipe в разделе «Расширения сети»…'},
+  {t:'Конфигурация прокси', d:'macOS спросит разрешение подключить расширение к сетевому стеку.', a:'Продолжить', wait:'Подтвердите системный запрос…'},
+  {t:'Фоновый помощник', d:'Настраивает правила pf, чтобы SplitPipe работал вместе с kill switch вашего VPN.', a:'Открыть настройки', wait:'Разрешите SplitPipe работать в фоне…'},
+];
+function renderOnboarding(){
+  const o = S.onboarding;
+  const done = o.st.filter(s => s === 'done').length;
+  if (done === 3) return `<div class="onb"><div class="onbc" style="text-align:center"><div class="logo">${logo(76)}</div>
+      <h2>Всё готово</h2><p class="lead">SplitPipe работает. Выберите приложения и укажите, куда направлять их трафик.</p>
+      <div style="display:flex;justify-content:center;gap:16px;margin-bottom:22px">${['Расширение','Прокси','Помощник'].map(x => `<span class="pill" style="color:var(--c-ok);background:color-mix(in srgb,var(--c-ok) 13%,transparent)">${ic('check','s')} ${x}</span>`).join('')}</div>
+      <button class="btn primary big" data-act="onb-finish">Перейти к приложениям</button></div></div>`;
+  const cur = o.st.findIndex(s => s !== 'done');
+  return `<div class="onb"><div class="onbc"><div class="logo">${logo(64)}</div>
+    <h2>Настроим SplitPipe</h2><p class="lead">Три системных разрешения — дальше всё настроится само.</p>
+    <div class="prog"><div style="width:${done / 3 * 100}%"></div></div>
+    ${ONB.map((s, i) => {
+      const st = o.st[i], isCur = i === cur;
+      const cls = st === 'done' ? 'done' : st === 'error' ? 'err cur' : isCur ? 'cur' : '';
+      let act = '';
+      if (isCur && st === 'pending') act = `<div class="act"><button class="btn primary" data-act="onb-step" data-i="${i}">${s.a}</button></div>`;
+      if (isCur && st === 'waiting') act = `<div class="act"><span class="spin"></span><span class="dim" style="font-size:12px">${s.wait}</span><button class="btn ghost" data-act="onb-step" data-i="${i}">Открыть снова</button></div>`;
+      if (st === 'error') act = `<div class="errm">${i === 1 ? 'Разрешение не получено: вы нажали «Не разрешать».' : 'Не удалось активировать: macOS вернула ошибку (OSSystemExtensionError 8).'}</div><div class="act"><button class="btn primary" data-act="onb-retry" data-i="${i}">Повторить</button></div>`;
+      return `<div class="step ${cls}"><div class="num">${st === 'done' ? ic('check','s') : st === 'error' ? '!' : i + 1}</div><div style="flex:1"><div class="st1">${s.t}</div><div class="st2">${s.d}</div>${act}</div></div>`;
+    }).join('')}
+  </div></div>`;
+}
+function onbComplete(i){
+  const o = S.onboarding;
+  if (!o) return;
+  if (S.onbErrStep === i + 1) { o.st[i] = 'error'; S.onbErrStep = 0; }
+  else o.st[i] = 'done';
+  S.sys = null; S.alert = null;
+  render();
+}
+
+/* ============================== settings ============================== */
+const SET_TABS = [['general','gear','Основные'],['ks','lockshield','Kill switch'],['routing','routes','Маршрутизация'],['dns','globe','DNS'],['checks','gauge','Проверки'],['adv','dots','Дополнительно']];
+const tg = k => `<button class="toggle${S.settings[k] ? ' on' : ''}" data-act="set-toggle" data-k="${k}"></button>`;
+const sseg = (k, opts) => `<div class="seg">${opts.map(([v, l]) => `<button class="${S.settings[k] === v ? 'on' : ''}" data-act="set-val" data-k="${k}" data-v="${v}">${l}</button>`).join('')}</div>`;
+const spop = (k, opts) => { const cur = opts.find(o => o[0] === S.settings[k]) || opts[0]; return `<button class="popup" data-act="set-pop" data-k="${k}" data-opts='${esc(JSON.stringify(opts))}'><span class="lbl">${esc(cur[1])}</span><span class="chev">${ic('chev','s')}</span></button>`; };
+const frow = (label, ctl, hint='') => `<div class="frow"><div class="fl"><div>${label}</div>${hint ? `<div class="h">${hint}</div>` : ''}</div>${ctl}</div>`;
+const fbOpts = [['block','Блокировать'],['default','Маршрут по умолчанию']];
+function renderSettingsBody(){
+  const s = S.settings;
+  switch (S.setTab) {
+    case 'general': return `<div class="fgroup">${frow('Запускать при входе в систему', tg('launchAtLogin'))}${frow('Показывать в строке меню', tg('menuBar'), 'Быстрое переключение маршрута активного приложения')}${frow('Показывать в Dock', tg('dock'))}</div>
+      <div class="fgroup">${frow('Уведомления', tg('notify'), 'Например: «VPN отключился, заблокировано 3 приложения»')}</div>`;
+    case 'ks': return `${S.amneziaKS ? `<div class="hintbox">${ic('infoc','', 'color:var(--accent)')}<div><b>Kill switch Amnezia активен.</b> Наш kill switch дублирует его — он нужен, если VPN несколько или у VPN нет своего kill switch.</div></div>` : ''}
+      <div class="fgroup">${frow('Режим', sseg('ksMode', [['off','Выкл'],['drop','При обрыве VPN'],['always','Всегда']]), s.ksMode === 'drop' ? 'Блокирует, если VPN оборвался. Если отключить VPN вручную, интернет остаётся.' : s.ksMode === 'always' ? 'Без VPN трафик заблокирован всегда.' : 'Трафик идёт по системному маршруту, даже если VPN недоступен.')}
+        ${frow('Разрешить локальную сеть', tg('ksLan'), 'Принтеры, NAS, AirPlay и роутер доступны при сработавшем kill switch')}</div>
+      <div class="fnote">Приложения с маршрутом «Напрямую» продолжают работать: kill switch блокирует только трафик «по умолчанию» без VPN. Правила ставит фоновый помощник через pf — они действуют с момента загрузки системы.</div>`;
+    case 'routing': return `<div class="fgroup">${frow('Маршрут для новых приложений', `<button class="popup wide" data-act="set-route-new">${ic(rIcon(s.newRoute),'s', `color:${rColor(s.newRoute)}`)}<span class="lbl">${esc(rName(s.newRoute))}</span><span class="chev">${ic('chev','s')}</span></button>`)}</div>
+      <div class="fgroup"><div style="padding:9px 12px 0;font-weight:600;font-size:12px">Если маршрут недоступен — по умолчанию</div>${frow('Для VPN-маршрутов', spop('fbVpn', fbOpts))}${frow('Для «Напрямую»', spop('fbDirect', fbOpts))}</div>
+      <div class="fgroup">${frow('Обрывать соединения при смене правила', tg('abortOnChange'), 'Браузеры держат соединения открытыми — без этого новое правило применится не сразу')}
+        ${frow('Локальная сеть всегда напрямую', tg('lanDirect'))}
+        ${frow('IPv6', sseg('ipv6', [['allow','Разрешать'],['reject','Сразу отклонять']]), 'Отклонять, если у маршрута нет IPv6: приложение сразу перейдёт на IPv4')}
+        ${frow('Отключить QUIC для перенаправленных приложений', tg('noQuic'), 'Блокирует UDP 443, браузер переходит на TCP')}</div>`;
+    case 'dns': return `<div class="fgroup">${frow('DNS для приложений «Напрямую»', spop('dns', [['system','Системный (через VPN)'],['provider','DNS провайдера'],['custom','Свой сервер'],['doh','DNS-over-HTTPS']]), s.dns === 'system' ? '⚠︎ Адреса резолвятся через VPN — гео-CDN может отдать «не тот» сервер' : '')}
+        ${s.dns === 'custom' ? frow('Адрес сервера', `<input class="textin mono" style="width:180px" data-k="dnsCustom" value="${esc(s.dnsCustom)}">`) : ''}
+        ${s.dns === 'doh' ? frow('URL', `<input class="textin mono" data-k="dnsDoh" value="${esc(s.dnsDoh)}">`) : ''}</div>
+      <div class="fnote">Приложения, идущие через VPN, всегда используют DNS этого VPN.</div>`;
+    case 'checks': return `<div class="fgroup">${frow('Сервис определения внешнего IP', `<input class="textin mono" data-k="echo" value="${esc(s.echo)}">`)}${frow('Проверять маршруты', spop('interval', [['1','каждую минуту'],['5','каждые 5 минут'],['15','каждые 15 минут'],['0','только вручную']]))}</div>`;
+    default: return `<div class="fgroup">${frow('Уровень логов', spop('log', [['error','Ошибки'],['info','Обычный'],['debug','Подробный']]))}${frow('Диагностика', '<button class="btn" data-act="toast" data-msg="Сохранено: SplitPipe-diagnostics.zip">Экспорт…</button>')}</div>
+      <div class="fgroup">${frow('Правила', '<div style="display:flex;gap:6px"><button class="btn" data-act="toast" data-msg="Импорт правил">Импорт…</button><button class="btn" data-act="toast" data-msg="Сохранено: splitpipe-rules.json">Экспорт…</button></div>')}${frow('Сбросить все правила', '<button class="btn danger" data-act="reset-rules">Сбросить</button>')}</div>
+      <div class="fgroup">${frow('Удалить SplitPipe полностью', '<button class="btn dangerfill" data-act="uninstall">Удалить…</button>', 'Сетевое расширение, фоновый помощник и правила pf')}</div>`;
+  }
+}
+function renderSettings(){
+  if (!S.setOpen) return '';
+  const {x, y} = S.win.set;
+  const title = SET_TABS.find(t => t[0] === S.setTab)[2];
+  return `<div class="win" id="setwin" style="left:${x}px;top:${y}px">
+    <div class="settb" data-drag="set"><div style="position:absolute;left:14px;top:13px" class="lights"><span data-act="close-settings"></span><span></span><span></span></div>
+      <div class="ttl">${title}</div><div class="tabs">${SET_TABS.map(([k, i, l]) => `<div class="tab${S.setTab === k ? ' on' : ''}" data-act="set-tab" data-v="${k}">${ic(i)}<span>${l}</span></div>`).join('')}</div></div>
+    <div class="setbody">${renderSettingsBody()}</div>
+    ${S.confirm ? `<div class="scrim" style="position:absolute;background:rgba(0,0,0,.12)"><div class="dialog">${logo(48)}<h4>Удалить SplitPipe полностью?</h4><p>Будут удалены сетевое расширение, фоновый помощник и правила pf. Трафик пойдёт как обычно.</p>
+      <div class="db"><button class="btn dangerfill" data-act="uninstall-yes">Удалить</button><button class="btn" data-act="uninstall-no">Отменить</button></div></div></div>` : ''}
+  </div>`;
+}
+
+/* ============================== fake system UI ============================== */
+function renderSys(){
+  if (!S.sys) return '';
+  const {x, y} = S.win.sys;
+  const helper = S.sys === 'helper';
+  const on = helper ? false : S.ext && !S.onboarding;
+  return `<div class="win" id="syswin" style="left:${x}px;top:${y}px"><div class="sysw">
+    <div class="ss" style="position:relative"><div style="position:absolute;top:14px;left:14px" class="lights"><span data-act="close-sys"></span><span></span><span></span></div>
+      ${[['#8e8e93','Основные'],['#0a84ff','Wi-Fi'],['#5e5ce6','VPN'],['#34c759','Объекты входа и расширения'],['#ff9f0a','Конфиденциальность'],['#636366','Экранное время']].map(([c, l]) => `<div class="it${l.startsWith('Объекты') ? ' on' : ''}"><span class="sq" style="background:${c}"></span>${l}</div>`).join('')}</div>
+    <div class="sc" data-drag="sys"><h2>Объекты входа и расширения</h2>
+      ${helper ? `<div class="fh dim" style="font-size:12px;font-weight:600;margin-bottom:6px">Разрешить в фоне</div>
+        <div class="fgroup">${[['AmneziaVPN','Amnezia', true],['SplitPipe','Фоновый помощник SplitPipe', false],['Docker','Docker Inc', true]].map(([n, d, v]) => `<div class="frow"><div class="fl"><div>${n}</div><div class="h">${d}</div></div>${n === 'SplitPipe' ? `<button class="toggle" data-act="sys-on"></button>` : `<button class="toggle${v ? ' on' : ''}"></button>`}</div>`).join('')}</div>`
+      : `<div class="fh dim" style="font-size:12px;font-weight:600;margin-bottom:6px">Расширения</div>
+        <div class="fgroup">${frow('Расширения сети', '<span class="dim">ⓘ</span>', 'Расширения, которые могут фильтровать или маршрутизировать сетевой трафик')}</div>
+        <div class="fgroup">${[['Outline','org.outline.macos.client', false],['SplitPipe','dev.splitpipe.app.proxy', on]].map(([n, d, v]) => `<div class="frow"><div class="fl"><div>${n}</div><div class="h mono">${d}</div></div>${n === 'SplitPipe' ? `<button class="toggle${v ? ' on' : ''}" data-act="sys-on"></button>` : `<button class="toggle${v ? ' on' : ''}"></button>`}</div>`).join('')}</div>`}
+      <div class="dim" style="font-size:11px;margin-top:6px">Это имитация системных настроек macOS. Включите SplitPipe.</div>
+    </div></div></div>`;
+}
+function renderAlert(){
+  if (!S.alert) return '';
+  return `<div class="scrim"><div class="dialog">${logo(54)}<h4>«SplitPipe» запрашивает разрешение на добавление конфигураций прокси</h4>
+    <p>Вся сетевая активность на этом Mac может фильтроваться или отслеживаться при использовании VPN или прокси.</p>
+    <div class="db"><button class="btn primary" data-act="alert-yes">Разрешить</button><button class="btn" data-act="alert-no">Не разрешать</button></div></div></div>`;
+}
+function renderNotif(){
+  if (!S.notif) return '';
+  return `<div class="notif">${logo(36)}<div style="flex:1;min-width:0"><div style="display:flex"><span class="t">${esc(S.notif.t)}</span><span class="dim" style="margin-left:auto;font-size:11px">сейчас</span></div><div class="b">${esc(S.notif.b)}</div></div></div>`;
+}
+let notifTimer, toastTimer;
+function notify(t, b){
+  if (!S.settings.notify) return;
+  S.notif = {t, b}; clearTimeout(notifTimer);
+  notifTimer = setTimeout(() => { S.notif = null; render(); }, 4200);
+}
+function toast(msg){ S.toast = msg; clearTimeout(toastTimer); toastTimer = setTimeout(() => { S.toast = null; render(); }, 2200); render(); }
+
+/* ============================== simulation panel ============================== */
+function renderSim(){
+  const el = document.getElementById('sim');
+  el.className = S.simMin ? 'min' : '';
+  if (S.simMin) { el.innerHTML = `<button class="mintog" data-sim="min" title="Развернуть">»</button>`; return; }
+  const sw = (on, key, l1='вкл', l0='выкл') => `<button class="sw${on ? ' on' : ''}" data-sim="${key}">${on ? l1 : l0}</button>`;
+  const running = APPS.filter(a => a.running);
+  el.innerHTML = `<div class="sb">
+    <h2>⚙ Симуляция <span style="flex:1"></span><button class="mintog" data-sim="min" title="Свернуть">«</button></h2>
+    <div class="note">Панель вне имитации macOS. Меняет «реальность» — приложение реагирует.</div>
+    <h5>VPN</h5>
+    ${S.vpnOrder.map(id => `<div class="sr"><span>${esc(S.routes[id].name)}</span>${sw(S.routes[id].up, 'vpn:' + id, 'подкл.', 'откл.')}</div>`).join('')}
+    <div class="sr"><span>Kill switch Amnezia</span>${sw(S.amneziaKS, 'aks')}</div>
+    <h5>Физическая сеть</h5>
+    <div class="sg">${[['wifi','Wi-Fi'],['ethernet','Ethernet'],['none','Нет сети']].map(([k, l]) => `<button class="sw${direct().phys === k ? ' on' : ''}" data-sim="phys:${k}">${l}</button>`).join('')}</div>
+    <h5>Система</h5>
+    <div class="sr"><span>Расширение разрешено</span>${sw(S.ext, 'ext')}</div>
+    <div class="sr"><span>На переднем плане</span><select data-sim-sel="fg">${running.map(a => `<option value="${a.id}"${a.id === S.foreground ? ' selected' : ''}>${esc(a.name)}</option>`).join('')}</select></div>
+    <div class="sr"><span>Тема</span><div class="sg">${sw(S.theme === 'light', 'theme:light', 'светлая', 'светлая')}${sw(S.theme === 'dark', 'theme:dark', 'тёмная', 'тёмная')}</div></div>
+    <h5>Онбординг</h5>
+    <button class="act" data-sim="onb">▶ Первый запуск</button>
+    <div class="sr"><span>Ошибка на шаге</span><select data-sim-sel="err">${[0,1,2,3].map(n => `<option value="${n}"${S.onbErrStep === n ? ' selected' : ''}>${n ? n : 'нет'}</option>`).join('')}</select></div>
+    <h5>Данные</h5>
+    <button class="act" data-sim="reset">⟲ Сбросить правила</button>
+    <button class="act" data-sim="restore">↺ Вернуть исходное состояние</button>
+    <h5>Сценарии</h5>
+    <div class="scn">1. «Первый запуск» → 3 шага → список.</div>
+    <div class="scn">2. Opera: «По умолчанию» → «Напрямую» — смотри «Соединения».</div>
+    <div class="scn">3. Откл. WireGuard «Work»: Slack блок, Jira → запасной OpenVPN (тоже откл. → блок).</div>
+    <div class="scn">4. Настройки → Kill switch «Всегда», откл. Amnezia: Safari/Xcode блок, Opera/Telegram работают.</div>
+    <div class="scn">5. Значок в строке меню → маршрут активного приложения.</div>
+    <div class="scn">6. Диагностика → DNS → «Исправить».</div>
+  </div>`;
+}
+
+/* ============================== render root ============================== */
+function render(){
+  const scr = document.getElementById('screen');
+  scr.classList.toggle('dark', S.theme === 'dark');
+  const qFocused = document.activeElement?.id === 'q';
+  const qPos = qFocused ? document.activeElement.selectionStart : 0;
+  closeMenu();
+  scr.innerHTML = renderMenubar() + renderMain() + renderSettings() + renderSys() + renderPopover() + renderAlert() + renderNotif() + (S.toast ? `<div class="toast">${esc(S.toast)}</div>` : '');
+  if (qFocused) { const q = document.getElementById('q'); q.focus(); q.setSelectionRange(qPos, qPos); }
+  const rn = document.getElementById('rename');
+  if (rn) { rn.focus(); rn.select(); }
+  renderSim();
+}
+function renderLive(){
+  if (!S.mainOpen || S.onboarding) return;
+  const b = document.getElementById('badge-conns');
+  const active = S.conns.filter(c => c.state === 'active').length;
+  if (b) b.textContent = active;
+  if (S.view === 'conns') {
+    const body = document.getElementById('conn-body'); if (body) body.innerHTML = connRows();
+    const sub = document.getElementById('conn-sub'); if (sub) sub.textContent = active + ' активных';
+  }
+  const ic2 = document.getElementById('insp-conns');
+  if (ic2 && S.view === 'apps') ic2.innerHTML = inspConns(appById(S.selected));
+}
+function fit(){
+  const wrap = document.getElementById('stagewrap'), box = document.getElementById('screenbox'), scr = document.getElementById('screen');
+  const k = Math.min(wrap.clientWidth / 1280, wrap.clientHeight / 800, 1.25);
+  scr.style.transform = `scale(${k})`;
+  box.style.width = 1280 * k + 'px'; box.style.height = 800 * k + 'px';
+}
+
+/* ============================== actions ============================== */
+function setRoute(appId, key){
+  const a = appById(appId);
+  const prev = ruleRoute(a);
+  if (!a.rule) a.rule = {route:key, fb:fbDefault(key)};
+  else {
+    const oldDef = fbDefault(a.rule.route);
+    a.rule.route = key;
+    if (a.rule.fb === oldDef || (a.rule.fb.startsWith('alt:') && a.rule.fb.slice(4) === key)) a.rule.fb = fbDefault(key);
+  }
+  if (prev !== key) refreshApp(appId);
+  render();
+}
+function setVpn(id, up){
+  const r = S.routes[id];
+  if (r.up === up) return;
+  r.up = up;
+  if (!up) {
+    abortConns(c => c.route === id);
+    const affected = APPS.filter(a => a.rule && a.rule.route === id);
+    const blocked = affected.filter(a => effective(a).block);
+    notify(`${r.name} отключился`, blocked.length ? `Заблокировано: ${blocked.map(a => a.name).join(', ')}` : affected.length ? `${affected.map(a => a.name).join(', ')} → запасной маршрут` : 'Приложения не затронуты');
+    if (id === 'amnezia' && ksOn()) setTimeout(() => notify('Kill switch сработал', 'Трафик без VPN заблокирован. «Напрямую» продолжают работать.'), 900);
+  } else {
+    APPS.filter(a => a.rule && a.rule.route === id).forEach(a => abortConns(c => c.app === a.id));
+    notify(`${r.name} подключён`, 'Правила снова применяются');
+  }
+  APPS.filter(a => a.running).forEach(spawnConn);
+  render();
+}
+
+const scr = () => document.getElementById('screen');
+document.addEventListener('mousedown', e => {
+  if (menuCtx && !menuCtx.el.contains(e.target) && !menuCtx.anchor.contains(e.target)) closeMenu();
+  if (S.popover && !e.target.closest('.popover') && !e.target.closest('[data-act="popover"]') && !e.target.closest('.menu') && scr().contains(e.target)) {
+    S.popover = false;
+    document.querySelector('.popover')?.remove();
+    document.querySelector('.menubar .ico.on')?.classList.remove('on');
+  }
+});
+document.addEventListener('click', e => {
+  const pick = e.target.closest('[data-pick]');
+  if (pick && menuCtx) { const cb = menuCtx.cb; closeMenu(); cb(pick.dataset.pick); return; }
+  const sim = e.target.closest('[data-sim]');
+  if (sim) return simAct(sim.dataset.sim);
+  const el = e.target.closest('[data-act]');
+  if (!el || !scr().contains(el)) return;
+  const act = el.dataset.act, d = el.dataset;
+  if (act === 'route-menu' || act === 'alt-menu' || act === 'set-pop' || act === 'conn-filter' || act === 'set-route-new') {
+    e.stopPropagation();
+    if (menuCtx && menuCtx.anchor === el) return closeMenu();
+  }
+  switch (act) {
+    case 'route-menu': { const a = appById(d.app); openMenu(el, routeMenuItems(), ruleRoute(a), k => setRoute(a.id, k)); break; }
+    case 'alt-menu': { const a = appById(d.app); const cur = a.rule.fb.slice(4); openMenu(el, routeMenuItems({realOnly:true, exclude:a.rule.route}), cur, k => { a.rule.fb = 'alt:' + k; render(); }); break; }
+    case 'set-route-new': openMenu(el, routeMenuItems(), S.settings.newRoute, k => { S.settings.newRoute = k; render(); }); break;
+    case 'set-pop': { const opts = JSON.parse(d.opts); openMenu(el, opts.map(([k, l]) => ({key:k, label:l, noIcon:true})), S.settings[d.k], k => { S.settings[d.k] = k; render(); }); break; }
+    case 'conn-filter': { const opts = [['all','Все маршруты'],['direct','Напрямую'],...S.vpnOrder.map(id => [id, S.routes[id].name]),['block','Заблокированные']];
+      openMenu(el, opts.map(([k, l]) => ({key:k, label:l, noIcon: k === 'all'})), S.connFilter, k => { S.connFilter = k; render(); }); break; }
+    case 'select': if (!e.target.closest('.popup')) { S.selected = d.app; render(); } break;
+    case 'fb': { const a = appById(d.app); if (['default','block'].includes(ruleRoute(a))) break;
+      if (!a.rule) a.rule = {route:'default', fb:'default'};
+      if (d.v === 'alt') { if (!a.rule.fb.startsWith('alt:')) { const alt = ['direct', ...S.vpnOrder].find(id => id !== a.rule.route && routeUp(S.routes[id])) || 'direct'; a.rule.fb = 'alt:' + alt; } }
+      else a.rule.fb = d.v;
+      render(); break; }
+    case 'rule-reset': { const a = appById(d.app); a.rule = null; refreshApp(a.id); render(); break; }
+    case 'abort-app': e.stopPropagation(); { const n = abortConns(c => c.app === d.app); const a = appById(d.app); if (a.running) spawnConn(a); toast(n ? `Оборвано соединений: ${n}` : 'Нет активных соединений'); } break;
+    case 'view': S.view = d.v; render(); break;
+    case 'stats-period': S.statsPeriod = d.p; render(); break;
+    case 'view-routes': S.view = 'routes'; render(); break;
+    case 'filter': S.filter = d.v; render(); break;
+    case 'group': S.grouped = !S.grouped; render(); break;
+    case 'pause': S.paused = !S.paused; render(); break;
+    case 'collapse': if (!e.target.closest('button')) { S.collapsed[d.app] = !S.collapsed[d.app]; renderLive(); } break;
+    case 'check': checkRoute(d.r); break;
+    case 'check-all': ['direct', ...S.vpnOrder].forEach(checkRoute); break;
+    case 'rename': S.renaming = d.r; render(); break;
+    case 'diag': runDiag(); break;
+    case 'toggle-enabled': S.enabled = !S.enabled; APPS.filter(a => a.running).forEach(a => abortConns(c => c.app === a.id)); render(); break;
+    case 'popover': S.popover = !S.popover; render(); break;
+    case 'open-main': S.mainOpen = true; S.popover = false; render(); break;
+    case 'close-main': S.mainOpen = false; render(); break;
+    case 'open-settings': S.setOpen = true; S.popover = false; if (d.tab) S.setTab = d.tab; render(); break;
+    case 'close-settings': S.setOpen = false; S.confirm = null; render(); break;
+    case 'set-tab': S.setTab = d.v; render(); break;
+    case 'set-toggle': S.settings[d.k] = !S.settings[d.k]; render(); break;
+    case 'set-val': S.settings[d.k] = d.v; render(); break;
+    case 'set-dns': S.setOpen = true; S.setTab = 'dns'; render(); break;
+    case 'set-ks': S.setOpen = true; S.setTab = 'ks'; render(); break;
+    case 'sys-ext': S.sys = 'ext'; render(); break;
+    case 'close-sys': S.sys = null; if (S.onboarding) { const i = S.onboarding.st.indexOf('waiting'); if (i >= 0) S.onboarding.st[i] = 'pending'; } render(); break;
+    case 'sys-on': el.classList.add('on'); setTimeout(() => {
+        if (S.onboarding) onbComplete(S.sys === 'helper' ? 2 : 0);
+        else { S.ext = true; S.sys = null; toast('Сетевое расширение включено'); render(); }
+      }, 450); break;
+    case 'alert-yes': onbComplete(1); break;
+    case 'alert-no': S.alert = null; S.onboarding.st[1] = 'error'; render(); break;
+    case 'onb-step': { const i = +d.i; S.onboarding.st[i] = 'waiting'; if (i === 1) S.alert = true; else S.sys = i === 0 ? 'ext' : 'helper'; render(); break; }
+    case 'onb-retry': S.onboarding.st[+d.i] = 'pending'; render(); break;
+    case 'onb-finish': S.onboarding = null; S.ext = true; S.enabled = true; S.view = 'apps'; render(); break;
+    case 'reset-rules': APPS.forEach(a => a.rule = null); toast('Правила сброшены'); render(); break;
+    case 'uninstall': S.confirm = true; render(); break;
+    case 'uninstall-no': S.confirm = null; render(); break;
+    case 'uninstall-yes': S.confirm = null; S.setOpen = false; startOnboarding(); toast('SplitPipe удалён — запущен заново'); break;
+    case 'quit': S.popover = false; toast('В прототипе выход отключён'); break;
+    case 'toast': toast(d.msg); break;
+  }
+});
+document.addEventListener('input', e => {
+  if (e.target.id === 'q') { S.search = e.target.value; document.getElementById('applist').innerHTML = renderAppsList(); }
+  else if (e.target.dataset.k && e.target.classList.contains('textin')) S.settings[e.target.dataset.k] = e.target.value;
+});
+document.addEventListener('change', e => {
+  const s = e.target.dataset.simSel;
+  if (s === 'fg') { S.foreground = e.target.value; render(); }
+  if (s === 'err') { S.onbErrStep = +e.target.value; render(); }
+});
+document.addEventListener('keydown', e => {
+  if (e.target.id === 'rename') {
+    if (e.key === 'Enter') { const v = e.target.value.trim(); if (v) S.routes[S.renaming].name = v; S.renaming = null; render(); }
+    if (e.key === 'Escape') { S.renaming = null; render(); }
+  }
+  if (e.key === 'Escape') { closeMenu(); if (S.popover) { S.popover = false; render(); } }
+});
+document.addEventListener('focusout', e => {
+  if (e.target.id === 'rename' && S.renaming) { const v = e.target.value.trim(); if (v) S.routes[S.renaming].name = v; S.renaming = null; setTimeout(render); }
+});
+function checkRoute(id){
+  S.checks[id] = {state:'run'}; render();
+  setTimeout(() => {
+    const r = S.routes[id];
+    S.checks[id] = routeUp(r) ? {state:'ok', ip: id === 'direct' ? '203.0.113.10' : r.ext, ms: rnd(20, 95), at: Date.now()} : {state:'fail', at: Date.now()};
+    if (S.view === 'routes') render();
+  }, rnd(700, 1400));
+}
+function startOnboarding(){
+  S.onboarding = {st:['pending','pending','pending']};
+  S.ext = false; S.mainOpen = true; S.popover = false; S.sys = null; S.alert = null;
+  render();
+}
+const INITIAL = JSON.stringify({routes:S.routes, rules:APPS.map(a => a.rule), settings:S.settings});
+function simAct(k){
+  if (k === 'min') { S.simMin = !S.simMin; renderSim(); setTimeout(fit); return; }
+  if (k.startsWith('vpn:')) { const id = k.slice(4); setVpn(id, !S.routes[id].up); return; }
+  if (k.startsWith('phys:')) { const v = k.slice(5); if (direct().phys !== v) { direct().phys = v; abortConns(() => true); if (v === 'none') notify('Нет сети', 'Все маршруты недоступны'); APPS.filter(a => a.running).forEach(spawnConn); } render(); return; }
+  if (k.startsWith('theme:')) { S.theme = k.slice(6); render(); return; }
+  if (k === 'aks') S.amneziaKS = !S.amneziaKS;
+  if (k === 'ext') { S.ext = !S.ext; if (!S.ext) notify('Сетевое расширение выключено', 'SplitPipe не управляет трафиком'); }
+  if (k === 'onb') { startOnboarding(); return; }
+  if (k === 'reset') APPS.forEach(a => a.rule = null);
+  if (k === 'restore') { const o = JSON.parse(INITIAL); S.routes = o.routes; APPS.forEach((a, i) => a.rule = o.rules[i]); S.settings = o.settings; S.onboarding = null; S.ext = true; S.enabled = true; S.diag = null; S.checks = {}; }
+  render();
+}
+
+/* window dragging */
+let drag = null;
+document.addEventListener('pointerdown', e => {
+  const h = e.target.closest('[data-drag]');
+  if (!h || e.target.closest('button,input,.popup,[data-act]:not([data-drag]),.lights')) return;
+  const k = document.getElementById('screen').getBoundingClientRect().width / 1280;
+  const w = S.win[h.dataset.drag];
+  drag = {w, sx:e.clientX, sy:e.clientY, ox:w.x, oy:w.y, k, el:h.closest('.win')};
+});
+document.addEventListener('pointermove', e => {
+  if (!drag) return;
+  drag.w.x = Math.round(drag.ox + (e.clientX - drag.sx) / drag.k);
+  drag.w.y = Math.max(26, Math.round(drag.oy + (e.clientY - drag.sy) / drag.k));
+  drag.el.style.left = drag.w.x + 'px'; drag.el.style.top = drag.w.y + 'px';
+});
+document.addEventListener('pointerup', () => drag = null);
+
+/* init: #theme=light&view=routes&popover=1&settings=ks&onb=1&off=work,amnezia&ks=always */
+const H = new URLSearchParams(location.hash.slice(1));
+if (H.get('theme')) S.theme = H.get('theme');
+if (H.get('view')) S.view = H.get('view');
+if (H.get('ks')) S.settings.ksMode = H.get('ks');
+(H.get('off') || '').split(',').filter(Boolean).forEach(id => S.routes[id] && (S.routes[id].up = false));
+if (H.get('popover')) S.popover = true;
+if (H.get('settings')) { S.setOpen = true; S.setTab = H.get('settings'); }
+if (H.get('onb')) S.onboarding = {st:['done','pending','pending'].slice(0, 3).map((x, i) => i < +H.get('onb') ? 'done' : 'pending')};
+if (H.get('dns')) S.settings.dns = H.get('dns');
+
+APPS.filter(a => a.running).forEach(a => { spawnConn(a); spawnConn(a); });
+S.conns.forEach(c => { c.fresh = false; c.t = new Date(Date.now() - rnd(1000, 60000)); });
+S.conns.sort((a, b) => b.t - a.t);
+window.addEventListener('resize', fit);
+render(); fit();
+if (H.get('diag')) { S.view = 'diag'; runDiag(); }
+setInterval(tick, 1300);
+setInterval(() => { const c = document.querySelector('.menubar .clock'); if (c) { const n = new Date(); c.textContent = c.textContent.replace(/\d\d:\d\d$/, n.toTimeString().slice(0,5)); } }, 15000);
+</script>
+</body>
+</html>
