@@ -18,10 +18,12 @@ struct SettingsView: View {
                 .tabItem { Label("Проверки", systemImage: "gauge.with.dots.needle.67percent") }.tag("checks")
             AdvancedSettings()
                 .tabItem { Label("Дополнительно", systemImage: "ellipsis.circle") }.tag("advanced")
+            AboutSettings()
+                .tabItem { Label("О программе", systemImage: "info.circle") }.tag("about")
         }
         .frame(width: 600)
         // Вкладки прошлых версий (Kill switch, DNS) убраны, пока их функций нет.
-        .onAppear { if !["general", "routing", "lists", "helper", "checks", "advanced"].contains(tab) { tab = "general" } }
+        .onAppear { if !["general", "routing", "lists", "helper", "checks", "advanced", "about"].contains(tab) { tab = "general" } }
     }
 }
 
@@ -391,5 +393,29 @@ private struct AdvancedSettings: View {
         } message: {
             Text("Будут удалены сетевое расширение, конфигурация прокси, помощник и его правила pf. Трафик пойдёт как обычно. Приложение закроется; сам файл SplitPipe.app перенесите в корзину вручную.")
         }
+    }
+}
+
+private struct AboutSettings: View {
+    /// Версия из git (scripts/resolve_version.sh): `X.Y.Z` у релиза, иначе `X.Y.Z-N-g<hash>` или хэш коммита.
+    private let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "?"
+    private let build = Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "?"
+
+    var body: some View {
+        VStack(spacing: 8) {
+            Image(nsImage: NSApp.applicationIconImage)
+                .resizable()
+                .frame(width: 96, height: 96)
+            Text("SplitPipe").font(.title.bold())
+            Text("Маршрут для каждого приложения на Mac").foregroundStyle(.secondary)
+            Text("Версия \(version) (\(build))")
+                .font(.callout.monospacedDigit())
+                .textSelection(.enabled)
+                .padding(.top, 4)
+            Link("Исходный код на GitHub", destination: URL(string: "https://github.com/gigimon/splitpipe")!)
+                .padding(.top, 8)
+        }
+        .padding(32)
+        .frame(maxWidth: .infinity)
     }
 }

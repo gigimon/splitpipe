@@ -8,7 +8,7 @@
 - Versions come from git (`scripts/resolve_version.sh`, sourced by `scripts/package.sh`): HEAD at a `vX.Y.Z` tag gives
   `X.Y.Z`, anything else `X.Y.Z-N-g<hash>` after the last tag (the short hash before the first one), `-dirty` with
   uncommitted changes; the build number is the commit count. `EXTENSION_VERSION` stays as in the Makefile. `make build`
-  keeps its timestamp build number for local development.
+  uses the same version and keeps a timestamp build number for local development. Settings → About shows both.
 
 ## Build and development lessons
 

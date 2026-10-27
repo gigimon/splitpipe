@@ -1616,6 +1616,22 @@
         }
       }
     },
+    "Версия %@ (%@)": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Version %1$@ (%2$@)"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Версия %@ (%@)"
+          }
+        }
+      }
+    },
     "Весь трафик": {
       "localizations": {
         "en": {
@@ -2976,6 +2992,22 @@
         }
       }
     },
+    "Исходный код на GitHub": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Source code on GitHub"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Исходный код на GitHub"
+          }
+        }
+      }
+    },
     "Когда у маршрута меняется интерфейс или адрес: VPN переподключился, другая сеть Wi-Fi": {
       "localizations": {
         "en": {
@@ -3132,6 +3164,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Маршрут активного приложения"
+          }
+        }
+      }
+    },
+    "Маршрут для каждого приложения на Mac": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A route for every app on your Mac"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Маршрут для каждого приложения на Mac"
           }
         }
       }
@@ -4012,6 +4060,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Нужно правило pf, которое пропускает SplitPipe мимо kill switch."
+          }
+        }
+      }
+    },
+    "О программе": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "About"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "О программе"
           }
         }
       }

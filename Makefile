@@ -12,6 +12,9 @@ EXTENSION_VERSION := $(shell \
 		find SplitPipeProxy Shared -type f -exec stat -f %m {} + | sort -n | tail -1; \
 	fi)
 
+# App version from git tags, shown in Settings → About (scripts/resolve_version.sh).
+APP_VERSION := $(shell bash -c 'source scripts/resolve_version.sh && echo $$APP_VERSION')
+
 .PHONY: project build test package install run logs clean
 
 project:
@@ -20,7 +23,7 @@ project:
 build: project
 	xcodebuild -project SplitPipe.xcodeproj -scheme SplitPipe -configuration Debug \
 		-derivedDataPath $(BUILD_DIR) -allowProvisioningUpdates \
-		CURRENT_PROJECT_VERSION=$(shell date +%s) EXTENSION_VERSION=$(EXTENSION_VERSION) build
+		MARKETING_VERSION=$(APP_VERSION) CURRENT_PROJECT_VERSION=$(shell date +%s) EXTENSION_VERSION=$(EXTENSION_VERSION) build
 
 # Pure logic without network: parsing routing socket messages, IPv6 routes, STUN, rule matching.
 test: project
