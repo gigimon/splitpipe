@@ -111,15 +111,15 @@ final class Guardian: @unchecked Sendable {
             guard let self, !NetworkState.isTunnel(iface), iface == (self.network.physical ?? iface) else { return }
             self.routesStale = "адрес \(iface) назначен заново"
         }
-        let events = monitor.start(queue: queue)
-        if !events { log.error("routing socket unavailable, polling every 5 s") }
+        let routeEvents = monitor.start(queue: queue)
+        if !routeEvents { log.error("routing socket unavailable, polling every 5 s") }
         startLinkWatch()
         kernelEvents.onEvent = { [weak self] event in self?.kernelEvent(event) }
         if !kernelEvents.start(queue: queue) {
             log.error("kernel event socket unavailable: \(String(cString: strerror(errno)), privacy: .public)")
         }
         let t = DispatchSource.makeTimerSource(queue: queue)
-        let interval = events ? 30 : 5
+        let interval = routeEvents ? 30 : 5
         t.schedule(deadline: .now() + .seconds(interval), repeating: .seconds(interval), leeway: .seconds(1))
         t.setEventHandler { [weak self] in self?.tick() }
         t.resume()
