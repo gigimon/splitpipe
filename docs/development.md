@@ -1,5 +1,15 @@
 # Development notes
 
+## CI and versions
+
+- `.github/workflows/ci.yml` runs on pushes to `main` and on pull requests (`macos-26`, Xcode 26.5): `make test` and
+  `make package`, which builds an unsigned Release archive (`build/release/SplitPipe-<version>-macOS.zip` + `.sha256`)
+  and uploads it as an artifact. Unsigned, the system extension can't run — the archive only proves the build works.
+- Versions come from git (`scripts/resolve_version.sh`, sourced by `scripts/package.sh`): HEAD at a `vX.Y.Z` tag gives
+  `X.Y.Z`, anything else `X.Y.Z-N-g<hash>` after the last tag (the short hash before the first one), `-dirty` with
+  uncommitted changes; the build number is the commit count. `EXTENSION_VERSION` stays as in the Makefile. `make build`
+  keeps its timestamp build number for local development.
+
 ## Build and development lessons
 
 - The system extension's Info.plist must have `CFBundlePackageType = SYSX`, otherwise `sysextd` rejects it.

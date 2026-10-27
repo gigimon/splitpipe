@@ -1,5 +1,7 @@
 # SplitPipe
 
+[![CI](https://github.com/gigimon/splitpipe/actions/workflows/ci.yml/badge.svg)](https://github.com/gigimon/splitpipe/actions/workflows/ci.yml)
+
 Per-app traffic routing for macOS. For every app you pick where its traffic goes: through a VPN, directly through
 Wi-Fi/Ethernet, or nowhere (blocked).
 
@@ -49,6 +51,7 @@ make build    # generate the Xcode project and build
 make install  # build and copy to /Applications (system extensions only run from there)
 make run      # install and launch
 make test     # unit tests
+make package  # unsigned Release archive in build/release (what CI builds)
 make logs     # stream logs
 ```
 

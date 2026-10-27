@@ -12,7 +12,7 @@ EXTENSION_VERSION := $(shell \
 		find SplitPipeProxy Shared -type f -exec stat -f %m {} + | sort -n | tail -1; \
 	fi)
 
-.PHONY: project build test install run logs clean
+.PHONY: project build test package install run logs clean
 
 project:
 	xcodegen generate
@@ -26,6 +26,10 @@ build: project
 test: project
 	xcodebuild -project SplitPipe.xcodeproj -scheme SplitPipeTests -configuration Debug \
 		-derivedDataPath $(BUILD_DIR) test
+
+# Unsigned Release archive in build/release, version from git tags (scripts/resolve_version.sh).
+package:
+	EXTENSION_VERSION=$(EXTENSION_VERSION) scripts/package.sh
 
 install: build
 	-osascript -e 'quit app "SplitPipe"'
