@@ -1,0 +1,421 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SplitPipe documentation</title>
+<meta name="description" content="How to use SplitPipe: routes, app rules, what happens when a route is unavailable, rule order, the VPN kill switch, temporary routes, IP lists, automation, troubleshooting and uninstall.">
+<meta name="theme-color" content="#eef0f3">
+<link rel="canonical" href="https://splitpipe.tech/docs.html">
+<link rel="icon" href="assets/icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="assets/apple-touch-icon.png">
+<link rel="preload" href="assets/fonts/BigShouldersDisplay-latin.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="assets/fonts/FamiljenGrotesk-latin.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="assets/site.css?v=2">
+</head>
+<body>
+<a class="skip" href="#doc">Skip to content</a>
+
+<header class="top">
+  <div class="wrap">
+    <a class="brand" href="./" aria-label="SplitPipe home"><img src="assets/icon.svg" alt="" width="30" height="30"><span>SplitPipe</span></a>
+    <nav class="nav" aria-label="Main">
+      <a href="./#how">How it works</a>
+      <a href="./#features">Features</a>
+      <a href="./#kill-switch">Kill switch</a>
+      <a href="docs.html" aria-current="page">Docs</a>
+    </nav>
+    <a class="btn sm primary dl" href="./#install">Download</a>
+  </div>
+</header>
+
+<div class="wrap">
+  <header class="docs-hero">
+    <h1 class="display">Documentation</h1>
+    <p class="lead">How to send each app's traffic where you want it, and what SplitPipe does when a VPN drops.</p>
+  </header>
+
+  <div class="docs">
+    <nav class="toc" aria-label="Contents" data-toc>
+      <ol>
+        <li><a href="#overview">How SplitPipe works</a></li>
+        <li><a href="#install">Install and first launch</a></li>
+        <li><a href="#routes">Routes</a></li>
+        <li><a href="#rules">App rules</a></li>
+        <li><a href="#unavailable">When a route is unavailable</a></li>
+        <li><a href="#order">Rule order</a></li>
+        <li><a href="#kill-switch">Kill switch</a></li>
+        <li><a href="#temporary">Temporary routes</a></li>
+        <li><a href="#all-apps">Apps without a rule</a></li>
+        <li><a href="#ip-lists">IP lists</a></li>
+        <li><a href="#new-apps">New apps</a></li>
+        <li><a href="#programs">Command-line programs</a></li>
+        <li><a href="#connections">Connections</a></li>
+        <li><a href="#stats">Statistics and history</a></li>
+        <li><a href="#diagnostics">Diagnostics</a></li>
+        <li><a href="#menubar">Menu bar, widget, Control Center</a></li>
+        <li><a href="#automation">Automation</a></li>
+        <li><a href="#settings">Settings reference</a></li>
+        <li><a href="#troubleshooting">Troubleshooting and limits</a></li>
+        <li><a href="#uninstall">Uninstall</a></li>
+      </ol>
+    </nav>
+
+    <main class="doc" id="doc">
+      <details class="toc-mobile">
+        <summary>Contents<svg class="icon" aria-hidden="true"><use href="assets/icons/sprite.svg#i-arrow"/></svg></summary>
+        <ol>
+          <li><a href="#overview">How SplitPipe works</a></li>
+          <li><a href="#install">Install and first launch</a></li>
+          <li><a href="#routes">Routes</a></li>
+          <li><a href="#rules">App rules</a></li>
+          <li><a href="#unavailable">When a route is unavailable</a></li>
+          <li><a href="#order">Rule order</a></li>
+          <li><a href="#kill-switch">Kill switch</a></li>
+          <li><a href="#temporary">Temporary routes</a></li>
+          <li><a href="#all-apps">Apps without a rule</a></li>
+          <li><a href="#ip-lists">IP lists</a></li>
+          <li><a href="#new-apps">New apps</a></li>
+          <li><a href="#programs">Command-line programs</a></li>
+          <li><a href="#connections">Connections</a></li>
+          <li><a href="#stats">Statistics and history</a></li>
+          <li><a href="#diagnostics">Diagnostics</a></li>
+          <li><a href="#menubar">Menu bar, widget, Control Center</a></li>
+          <li><a href="#automation">Automation</a></li>
+          <li><a href="#settings">Settings reference</a></li>
+          <li><a href="#troubleshooting">Troubleshooting and limits</a></li>
+          <li><a href="#uninstall">Uninstall</a></li>
+        </ol>
+      </details>
+
+      <section id="overview" aria-labelledby="overview-h">
+        <h2 id="overview-h"><svg class="icon" aria-hidden="true"><use href="assets/icons/sprite.svg#i-route"/></svg>How SplitPipe works</h2>
+        <p>A VPN client normally takes over the Mac's default route, so every app's traffic goes into the tunnel. SplitPipe lets you choose a route per app instead: through a specific VPN, directly through Wi-Fi or Ethernet around the VPN, or nowhere.</p>
+        <p>SplitPipe has three parts:</p>
+        <ul>
+          <li><b>The app.</b> The window, the menu bar menu and settings. It keeps your rules and sends them to the extension.</li>
+          <li><b>The network extension.</b> A macOS transparent proxy. It sees each new TCP and UDP connection, knows which app opened it, and sends it through the interface of the chosen route. It keeps working when the app window is closed.</li>
+          <li><b>The background helper.</b> A small root service. While SplitPipe is on, it keeps your VPN's kill switch from blocking Direct traffic, and it resets connections that were opened before SplitPipe took over.</li>
+        </ul>
+        <p>Rules store the <em>role</em> of a route, not an interface name. Direct always means your main physical connection, whether that is Wi-Fi now and Ethernet later. A VPN rule follows that VPN even if its <code>utun</code> number changes after a reconnect.</p>
+      </section>
+
+      <section id="install" aria-labelledby="install-h">
+        <h2 id="install-h"><svg class="icon" aria-hidden="true"><use href="assets/icons/sprite.svg#i-download"/></svg>Install and first launch</h2>
+        <ol>
+          <li>Move <b>SplitPipe.app</b> to the <b>Applications</b> folder. macOS only allows network extensions from apps in Applications.</li>
+          <li>Open SplitPipe. The setup window asks for three permissions, one at a time:
+            <ul>
+              <li><b>Network Extension.</b> macOS opens System Settings; turn SplitPipe on under <i>Login Items &amp; Extensions, Network Extensions</i>.</li>
+              <li><b>Proxy Configuration.</b> macOS asks whether SplitPipe may add a proxy configuration. Click <i>Allow</i>.</li>
+              <li><b>Background Helper.</b> Turn SplitPipe on under <i>Login Items &amp; Extensions, Allow in the Background</i>. The helper is what makes Direct work next to a VPN kill switch.</li>
+            </ul>
+          </li>
+          <li>Choose whether SplitPipe should open at login. With <b>Start at boot</b> on, it starts without a window after you log in and turns routing back on if it was on.</li>
+        </ol>
+        <p>Each step turns green when macOS actually grants the permission. If a step fails, click <b>Retry</b>. You can run setup again later from <b>Settings, Advanced, Run setup again</b>.</p>
+        <div class="note vpn"><svg class="icon" aria-hidden="true"><use href="assets/icons/sprite.svg#i-power"/></svg><p>The master switch is the <b>SplitPipe</b> toggle in the sidebar and in the menu bar menu. When it is off, all traffic goes as if SplitPipe were not installed.</p></div>
+      </section>
+
+      <section id="routes" aria-labelledby="routes-h">
+        <h2 id="routes-h"><svg class="icon" aria-hidden="true"><use href="assets/icons/sprite.svg#i-signal"/></svg>Routes</h2>
+        <p>A route is a place traffic can go. The <b>Routes</b> section lists every route SplitPipe found, with its interface, local and external IP, and how many apps use it.</p>
+        <div class="table-scroll">
+          <table>
+            <thead><tr><th scope="col">Route</th><th scope="col">Where traffic goes</th></tr></thead>
+            <tbody>
+              <tr><td><span class="chip direct">Direct</span></td><td>Out through your main physical connection (Wi-Fi or Ethernet), around every VPN.</td></tr>
+              <tr><td><span class="chip vpn">A VPN</span></td><td>Into that VPN's tunnel. Every VPN is a separate route: you can send one app through your work WireGuard and another through AmneziaVPN at the same time.</td></tr>
+              <tr><td><span class="chip">Default</span></td><td>Wherever macOS would send it: through the VPN that holds the default route, or Direct if no VPN does.</td></tr>
+              <tr><td><span class="chip block">Block</span></td><td>Nowhere. New connections of the app are refused.</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p>VPNs are detected by their <code>utun</code> interfaces and named after the client: AmneziaVPN, WireGuard, OpenVPN and VPNs built on Network Extension. Double-click a name to rename it. A VPN you have rules for stays in the list as <i>disconnected</i> while it is off, so its rules are not lost.</p>
+        <figure class="shot-inline"><img src="assets/shots/routes.webp" width="2244" height="1504" loading="lazy" alt="The Routes section: Wi-Fi and each VPN with its interface, local and external IP, and the apps that use it."></figure>
+        <h3>Test Connection</h3>
+        <p><b>Test Connection</b> sends a request through the route's interface to Cloudflare and shows the external IP, the country and the latency. A STUN request checks UDP (calls, QUIC) over the same interface. Routes are tested every few minutes and when their interface or address changes; you can change that in <b>Settings, Checks</b>.</p>
+      </section>
+
+      <section id="rules" aria-labelledby="rules-h">
+        <h2 id="rules-h"><svg class="icon" aria-hidden="true"><use href="assets/icons/sprite.svg#i-toggles"/></svg>App rules</h2>
+        <p>The <b>Apps</b> section lists running apps and apps you have rules for. Each row has a route menu:</p>
+        <pre><code>Default
+Direct
+    Wi-Fi
+VPN
+    Amnezia VPN
+    WireGuard “Work”
+    OpenVPN Office    <span class="c">disconnected</span>
+Block</code></pre>
+        <p>Pick a route and the rule applies right away. A disconnected VPN can be picked too; the app follows the <a href="#unavailable">unavailable route</a> setting until the VPN connects. Use the filters <b>Running</b>, <b>With Rules</b> and <b>All</b>, or search by name.</p>
+        <p>Select an app to open its side panel:</p>
+        <ul>
+          <li><b>Route</b> and <b>If the route is unavailable</b>: the rule itself.</li>
+          <li><b>Right now</b>: where the app's traffic actually goes, for example <i>WireGuard “Work” is unavailable → blocked</i>.</li>
+          <li><b>Connections</b>: the app's recent connections, with <b>Drop Connections</b> to reconnect them through the current route.</li>
+          <li><b>Temporarily…</b>: a <a href="#temporary">temporary route</a>.</li>
+          <li><b>Remove Rule</b>: the app goes back to the route for apps without a rule.</li>
+        </ul>
+        <p>A rule covers the whole app, including its helper processes (bundle IDs that start with the app's ID) and system services that work on its behalf, such as WebKit's networking process in Safari-based apps.</p>
+        <div class="note direct"><svg class="icon" aria-hidden="true"><use href="assets/icons/sprite.svg#i-check"/></svg><p>Browsers keep connections open for minutes. With <b>Drop connections when a rule changes</b> on (the default), SplitPipe closes them when you change a rule, so the new route takes effect at once instead of on the next connection.</p></div>
+      </section>
+
+      <section id="unavailable" aria-labelledby="unavailable-h">
+        <h2 id="unavailable-h"><svg class="icon" aria-hidden="true"><use href="assets/icons/sprite.svg#i-fallback"/></svg>When a route is unavailable</h2>
+        <p>A route is unavailable when its VPN is disconnected, or, for Direct, when there is no network. Each rule says what to do then:</p>
+        <div class="table-scroll">
+          <table>
+            <thead><tr><th scope="col">Option</th><th scope="col">What happens</th></tr></thead>
+            <tbody>
+              <tr><td>Block</td><td>The app gets no network until the route is back. No traffic ever leaves through another route. Default for VPN routes.</td></tr>
+              <tr><td>Use the default route</td><td>The app goes wherever macOS sends traffic now. Default for Direct. If your VPN has a kill switch, this means “through the VPN or blocked”.</td></tr>
+              <tr><td>Fallback route</td><td>The app switches to another route you pick. If the fallback is unavailable too, the app is blocked.</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p>The app row and the side panel show what is happening, for example <i>OpenVPN Office is unavailable → Amnezia VPN</i>. With notifications on, SplitPipe tells you when a VPN with app rules stays down for more than 10 seconds: which apps are blocked and which moved to a fallback, and again when the VPN is back.</p>
+        <p>Defaults for new rules are in <b>Settings, Routing, If a route is unavailable</b>, separately for VPN routes and for Direct.</p>
+      </section>
+
+      <section id="order" aria-labelledby="order-h">
+        <h2 id="order-h"><svg class="icon" aria-hidden="true"><use href="assets/icons/sprite.svg#i-flow"/></svg>Rule order</h2>
+        <p>For every new connection SplitPipe looks for a rule in this order. The first match wins.</p>
+        <ol class="pipeline">
+          <li><b>The app's own rule</b><span>By the code signing ID of the process. Helper processes match their app: <code>com.tinyspeck.slackmacgap.helper</code> uses the rule for <code>com.tinyspeck.slackmacgap</code>; the longest matching ID wins.</span></li>
+          <li><b>A command-line program rule</b><span>By the path to the executable, for <code>curl</code>, <code>git</code>, <code>ssh</code> and other programs outside app bundles. See <a href="#programs">Command-line programs</a>.</span></li>
+          <li><b>The rule of the responsible app</b><span>For processes that work on behalf of an app: WebKit networking, XPC services. They follow the app that started them.</span></li>
+          <li><b>IP lists</b><span>Only for apps without their own rule and only with <b>Manage all apps</b> on. Lists are checked top to bottom; the first list containing the destination address applies its rule.</span></li>
+          <li><b>Route for apps without a rule</b><span>With <b>Manage all apps</b> on, everything else in an app bundle uses this route. With it off, those connections are left to macOS.</span></li>
+        </ol>
+        <p>Then SplitPipe resolves the route: if it is unavailable, the rule's <a href="#unavailable">unavailable setting</a> decides. A <a href="#temporary">temporary route</a> replaces the app's rule while it lasts, so it sits at step 1.</p>
+        <p>Some traffic never goes through rules:</p>
+        <ul>
+          <li>macOS system services and processes running as root, including VPN clients themselves. Routing a VPN client into its own tunnel would break it, so a rule on a VPN client is ignored.</li>
+          <li>Local addresses (<code>10.x</code>, <code>172.16.x</code> to <code>172.31.x</code>, <code>192.168.x</code>) with <b>Send local addresses via the system route</b> on, so printers, NAS and VPN-internal hosts stay reachable from Direct apps.</li>
+          <li>DNS queries, ICMP (<code>ping</code>) and raw sockets.</li>
+        </ul>
+        <p>Two settings refuse connections instead of routing them, so apps fall back fast: IPv6 when the route has no IPv6 (or always, with <b>Always reject IPv6</b>), and UDP port 443 with <b>Disable QUIC for redirected apps</b>, which makes browsers use TCP.</p>
+      </section>
+
+      <section id="kill-switch" aria-labelledby="ks-h">
+        <h2 id="ks-h"><svg class="icon" aria-hidden="true"><use href="assets/icons/sprite.svg#i-lock"/></svg>Kill switch</h2>
+        <p>A kill switch is a VPN client feature: firewall rules (pf on macOS) that block all traffic outside the VPN tunnel. If the VPN drops, nothing leaks out through Wi-Fi. AmneziaVPN, for example, turns it on while it is connected or reconnecting.</p>
+        <p>The same rules block the apps you want to send Direct. SplitPipe solves this with the background helper. While SplitPipe is on, the helper:</p>
+        <ul>
+          <li>adds a pf rule that lets traffic of the SplitPipe extension through the physical interface, and nothing else;</li>
+          <li>adds routes through Wi-Fi or Ethernet that Direct traffic can bind to while the VPN holds the default route;</li>
+          <li>restores both after sleep, network changes and VPN reconnects, and checks that its pf rule is actually in effect.</li>
+        </ul>
+        <figure class="figure">
+          <svg viewBox="0 0 640 196" role="img" aria-label="The VPN tunnel and SplitPipe's Direct traffic pass the kill switch; other traffic outside the tunnel stops at it.">
+            <path class="pipe vpn" stroke-width="12" d="M16 38 H624"/>
+            <path class="pipe direct" stroke-width="12" d="M16 98 H624"/>
+            <path class="pipe default" stroke-width="12" d="M16 158 H352"/>
+            <path class="pipe block" stroke-width="14" stroke-linecap="butt" d="M384 4 V18 M384 58 V78 M384 118 V192"/>
+            <circle cx="384" cy="98" r="22" fill="none" stroke="var(--direct)" stroke-width="4" stroke-dasharray="4 6"/>
+          </svg>
+          <figcaption>
+            <span class="chips"><span class="chip vpn">VPN tunnel, utun4: allowed</span><span class="chip direct">SplitPipe Direct, en0: the helper's gap</span><span class="chip block">Anything else outside the tunnel: blocked</span></span>
+          </figcaption>
+        </figure>
+        <p>Everything that is not Direct stays protected: apps on Default go through the VPN or nowhere, and apps on a VPN route go through that VPN.</p>
+        <h3>What the states mean</h3>
+        <p><b>Settings, Helper</b>, Diagnostics and the Routes section show the kill switch state:</p>
+        <div class="table-scroll">
+          <table>
+            <thead><tr><th scope="col">State</th><th scope="col">Meaning</th></tr></thead>
+            <tbody>
+              <tr><td>On, SplitPipe bypasses it</td><td>Everything works: Direct apps go out through Wi-Fi or Ethernet.</td></tr>
+              <tr><td>Blocking Direct</td><td>The kill switch stops Direct traffic. Usually the helper is not installed or not allowed. Click <b>Fix</b> or <b>Check Kill Switch Bypass</b>.</td></tr>
+              <tr><td>Not detected</td><td>No VPN kill switch is active. Nothing to bypass.</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="note block"><svg class="icon" aria-hidden="true"><use href="assets/icons/sprite.svg#i-warning"/></svg><p>SplitPipe has no kill switch of its own. To get “through the VPN or nothing” for an app, give it a VPN route and keep <b>Block</b> as its unavailable setting. Apps on Default rely on your VPN client's kill switch.</p></div>
+        <p>If a VPN client reloads its firewall so that SplitPipe's rule is no longer evaluated, the bypass stops working. The helper notices this and SplitPipe shows it, but it does not fight the VPN client's firewall. Reconnecting the VPN or clicking <b>Check Kill Switch Bypass</b> usually restores it. SplitPipe is tested with AmneziaVPN's kill switch.</p>
+      </section>
+
+      <section id="temporary" aria-labelledby="temporary-h">
+        <h2 id="temporary-h"><svg class="icon" aria-hidden="true"><use href="assets/icons/sprite.svg#i-timer"/></svg>Temporary routes</h2>
+        <p>Use <b>Temporarily…</b> in the side panel, the menu bar or the route hotkey menu to switch an app for a while:</p>
+        <ul>
+          <li><b>15 minutes</b> or <b>1 hour</b>;</li>
+          <li><b>Until the app quits</b>;</li>
+          <li><b>Until the VPN disconnects</b>. A reconnect within 30 seconds does not count.</li>
+        </ul>
+        <p>A timer icon marks the app, and the panel shows the time left and which route comes next. <b>Revert now</b> ends it early. Picking a route by hand makes it permanent. A temporary route on top of another returns to the original rule.</p>
+        <p>The app does the reverting. If SplitPipe is closed when the time runs out, the rule is reverted the next time it opens.</p>
+      </section>
+
+      <section id="all-apps" aria-labelledby="all-apps-h">
+        <h2 id="all-apps-h"><svg class="icon" aria-hidden="true"><use href="assets/icons/sprite.svg#i-widget"/></svg>Apps without a rule</h2>
+        <p>By default SplitPipe only handles apps that have a rule; everything else is left to macOS. Turn on <b>Settings, Routing, Manage all apps</b> to handle every app:</p>
+        <ul>
+          <li>connections of apps without a rule go through the <b>Route for apps without a rule</b> (Default unless you change it);</li>
+          <li>giving any running app a rule takes effect immediately, without restarting it;</li>
+          <li><a href="#ip-lists">IP lists</a> and <a href="#new-apps">new app</a> detection start working.</li>
+        </ul>
+        <p>macOS system services and VPN clients are never managed.</p>
+      </section>
+
+      <section id="ip-lists" aria-labelledby="ip-lists-h">
+        <h2 id="ip-lists-h"><svg class="icon" aria-hidden="true"><use href="assets/icons/sprite.svg#i-list"/></svg>IP lists</h2>
+        <p>An IP list gives a set of addresses its own route, for example “send addresses of local services Direct”. Lists are in <b>Settings, Lists</b>.</p>
+        <ul>
+          <li><b>Add from URL…</b> downloads a list and updates it daily. <b>Update</b> refreshes it now.</li>
+          <li><b>Add File…</b> uses a local file and reloads it when the file changes.</li>
+          <li>Each list has a route and an unavailable setting, like an app.</li>
+          <li>Lists are checked in order; the first list containing the address wins. Reorder them with <b>Up</b> and <b>Down</b>.</li>
+        </ul>
+        <p>The format is plain text, one IPv4 or IPv6 subnet or address per line. Comments start with <code>#</code> or <code>;</code>.</p>
+        <pre><code><span class="c"># Example</span>
+1.2.3.0/24
+5.6.7.8
+2a00::/32   <span class="c">; IPv6 works too</span></code></pre>
+        <p>An app's own rule always wins over a list, and a list wins over the route for apps without a rule. Lists need <b>Manage all apps</b>. They apply only to connections made to an IP address: when an app connects by host name (many apps using system networking do), the address is not known yet and lists do not apply.</p>
+        <p>If a download or parse fails, the last good copy stays in use. The list's status line shows its entries, last update and errors.</p>
+      </section>
+
+      <section id="new-apps" aria-labelledby="new-apps-h">
+        <h2 id="new-apps-h"><svg class="icon" aria-hidden="true"><use href="assets/icons/sprite.svg#i-bell"/></svg>New apps</h2>
+        <p><b>Settings, Routing, New apps</b> decides what happens when an app without a rule goes online for the first time. It needs <b>Manage all apps</b>.</p>
+        <ul>
+          <li><b>Do nothing</b>: the app uses the route for apps without a rule.</li>
+          <li><b>Ask</b>: a notification with buttons <i>Default</i>, <i>Direct</i>, and <i>Via</i> one or two connected VPNs. Until you answer, the app uses the route for apps without a rule. Each app is asked once.</li>
+          <li><b>Route right away</b>: every new app gets the route you pick.</li>
+        </ul>
+        <p>When you turn it on, apps that are already running count as known, so you won't get a burst of notifications. The list below the setting shows known apps without a rule; <b>Ask Again</b> forgets one.</p>
+      </section>
+
+      <section id="programs" aria-labelledby="programs-h">
+        <h2 id="programs-h"><svg class="icon" aria-hidden="true"><use href="assets/icons/sprite.svg#i-code"/></svg>Command-line programs</h2>
+        <p>Programs outside app bundles, such as <code>curl</code>, <code>git</code>, <code>ssh</code> or a Homebrew tool, are listed under <b>Programs</b> in the Apps section. Click <b>+</b> to add a rule for a program by the path to its executable, for example <code>/usr/bin/curl</code>.</p>
+        <p>The rule matches the path, not the signature, so it keeps working after <code>brew upgrade</code> or a rebuild. The flip side: if a file in your home folder is replaced, the replacement gets the same route.</p>
+      </section>
+
+      <section id="connections" aria-labelledby="connections-h">
+        <h2 id="connections-h"><svg class="icon" aria-hidden="true"><use href="assets/icons/sprite.svg#i-pulse"/></svg>Connections</h2>
+        <p>The <b>Connections</b> section is a live feed of connections that go through SplitPipe: time, app, address and host, protocol, the route the connection really took, and traffic. For apps on Default it shows where the traffic actually went.</p>
+        <figure class="shot-inline"><img src="assets/shots/conns.webp" width="2244" height="1504" loading="lazy" alt="The Connections feed with time, app, address, protocol, route and traffic for each connection."></figure>
+        <ul>
+          <li>Filter by route, or show only blocked connections.</li>
+          <li><b>Group by App</b> collapses the feed per app; <b>Drop App's Connections</b> reconnects an app through its current route.</li>
+          <li>Pause the feed to read it.</li>
+        </ul>
+        <h3>Bypassing SplitPipe</h3>
+        <p>A connection opened before SplitPipe was turned on, or before a rule changed, keeps going the old way. The helper resets such connections, and SplitPipe also checks every 15 seconds for TCP connections of apps with a rule that go around it. They appear in the feed as <i>bypassing SplitPipe</i>, the app gets a badge, and you get a notification at most once an hour. <b>Drop Connections</b> moves them onto the rule.</p>
+      </section>
+
+      <section id="stats" aria-labelledby="stats-h">
+        <h2 id="stats-h"><svg class="icon" aria-hidden="true"><use href="assets/icons/sprite.svg#i-graph"/></svg>Statistics and history</h2>
+        <p><b>Statistics</b> shows traffic through SplitPipe for the last hour, today, 7 or 30 days: totals, a chart by route, and lists of routes and apps. The extension counts it and keeps 30 days. Reset it in <b>Settings, Advanced</b>. Traffic that does not go through SplitPipe (system services, programs without a rule) is not counted.</p>
+        <p><b>History</b> is one timeline of events from the app, the extension and the helper: network changes, VPNs disconnecting and coming back with the apps affected, the kill switch blocking, helper actions, rule changes and temporary routes. It covers time when the app was closed. Filter by source, show <b>Problems only</b>, search, or <b>Export…</b> to a text file.</p>
+      </section>
+
+      <section id="diagnostics" aria-labelledby="diagnostics-h">
+        <h2 id="diagnostics-h"><svg class="icon" aria-hidden="true"><use href="assets/icons/sprite.svg#i-wrench"/></svg>Diagnostics</h2>
+        <p><b>Run Checks</b> tests, one after another: the network extension, the helper, each route and its external IP, the VPN kill switch and DNS. Each result is OK, a warning or a problem, and problems come with a button that leads to the fix.</p>
+        <figure class="shot-inline"><img src="assets/shots/diag.webp" width="2244" height="1504" loading="lazy" alt="Diagnostics with a result for the extension, the helper, each route, the kill switch and DNS."></figure>
+        <p>To report a bug, use <b>Settings, Advanced, Diagnostics, Export…</b>. The file contains the checks, the current state and the event history.</p>
+      </section>
+
+      <section id="menubar" aria-labelledby="menubar-h">
+        <h2 id="menubar-h"><svg class="icon" aria-hidden="true"><use href="assets/icons/sprite.svg#i-menubar"/></svg>Menu bar, widget, Control Center</h2>
+        <p>The menu bar icon opens a menu with the SplitPipe toggle and status, connected VPNs, problems such as <i>WireGuard “Work” disconnected, Slack blocked</i>, the frontmost app with its route menu, and your apps with rules. The icon changes when something needs attention.</p>
+        <p>The <b>widget</b> (small and medium) shows the status, connected VPNs, problems and today's traffic on the desktop or in Notification Center. The <b>Control Center</b> control turns SplitPipe on and off.</p>
+        <p>You can hide the menu bar icon or the Dock icon in <b>Settings, General</b>; one of them always stays visible.</p>
+      </section>
+
+      <section id="automation" aria-labelledby="automation-h">
+        <h2 id="automation-h"><svg class="icon" aria-hidden="true"><use href="assets/icons/sprite.svg#i-link"/></svg>Automation</h2>
+        <h3>Links</h3>
+        <p>SplitPipe handles <code>splitpipe://</code> links:</p>
+        <div class="table-scroll">
+          <table>
+            <thead><tr><th scope="col">Link</th><th scope="col">Action</th></tr></thead>
+            <tbody>
+              <tr><td><code>splitpipe://toggle</code></td><td>Turn SplitPipe on or off.</td></tr>
+              <tr><td><code>splitpipe://on</code>, <code>splitpipe://off</code></td><td>Turn it on, or off.</td></tr>
+              <tr><td><code>splitpipe://route?app=…&amp;via=…&amp;for=…</code></td><td>Set an app's route. Without <code>for</code> the rule is permanent.</td></tr>
+              <tr><td><code>splitpipe://revert?app=…</code></td><td>End an app's temporary route.</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <ul>
+          <li><code>app</code>: a bundle ID or an app name. Without it, the frontmost app.</li>
+          <li><code>via</code>: <code>direct</code>, <code>default</code>, <code>block</code>, <code>vpn:&lt;key&gt;</code> such as <code>vpn:amnezia</code>, or a route name.</li>
+          <li><code>for</code>: <code>15m</code>, <code>1h</code>, <code>quit</code> (until the app quits) or <code>vpn</code> (until the VPN disconnects).</li>
+        </ul>
+        <pre><code>open "splitpipe://route?app=Telegram&amp;via=direct"
+open "splitpipe://route?app=com.tinyspeck.slackmacgap&amp;via=vpn:wireguard&amp;for=1h"</code></pre>
+        <p>A link from another program asks for confirmation first. Links from Shortcuts and from SplitPipe's own widget don't. To trust another program, tick <b>Always allow</b> in that dialog; trusted programs are listed in <b>Settings, General, splitpipe:// links without confirmation</b>.</p>
+        <h3>Shortcuts</h3>
+        <p>SplitPipe adds these actions to the Shortcuts app: <b>Turn SplitPipe On or Off</b>, <b>App Route</b> (an app, a route and a duration), <b>Revert Temporary Route</b>, <b>Get App Route</b> and <b>SplitPipe Status</b>. You can run them from Siri, Spotlight or automations.</p>
+        <h3>Keyboard shortcuts</h3>
+        <p>Set them in <b>Settings, General, Keyboard Shortcuts</b>. Both are unassigned by default and work in any app:</p>
+        <ul>
+          <li><b>Toggle SplitPipe</b>;</li>
+          <li><b>Route menu for the frontmost app</b>: opens at the mouse pointer, with every route and <b>Temporarily…</b>.</li>
+        </ul>
+      </section>
+
+      <section id="settings" aria-labelledby="settings-h">
+        <h2 id="settings-h"><svg class="icon" aria-hidden="true"><use href="assets/icons/sprite.svg#i-cog"/></svg>Settings reference</h2>
+        <div class="table-scroll">
+          <table>
+            <thead><tr><th scope="col">Tab</th><th scope="col">Settings</th></tr></thead>
+            <tbody>
+              <tr><td>General</td><td>Open at login and Start at boot; Show in menu bar; Show in Dock; Keyboard Shortcuts; splitpipe:// links without confirmation; Notifications.</td></tr>
+              <tr><td>Routing</td><td>Manage all apps; Route for apps without a rule; New apps; If a route is unavailable (for VPN routes, for Direct); Drop connections when a rule changes; Send local addresses via the system route; Always reject IPv6; Disable QUIC for redirected apps.</td></tr>
+              <tr><td>Lists</td><td>IP lists: add from a URL or a file, order, enable, route and unavailable setting, update.</td></tr>
+              <tr><td>Helper</td><td>Helper status, the kill switch bypass, its pf rule and route, the last action and errors; Check Kill Switch Bypass, Install Helper, Remove Helper.</td></tr>
+              <tr><td>Checks</td><td>The primary IP service (Cloudflare) and fallback services; STUN servers for UDP; Test routes every minute, 5 or 15 minutes, or only by hand; Test when the network changes.</td></tr>
+              <tr><td>Advanced</td><td>Export diagnostics; Import and export rules (JSON); Reset all rules; Reset traffic statistics; Run setup again; Remove SplitPipe completely.</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section id="troubleshooting" aria-labelledby="troubleshooting-h">
+        <h2 id="troubleshooting-h"><svg class="icon" aria-hidden="true"><use href="assets/icons/sprite.svg#i-warning"/></svg>Troubleshooting and limits</h2>
+        <h3>An app still uses the old route</h3>
+        <p>It keeps a connection that was opened earlier. Click <b>Drop Connections</b> in its side panel. Idle connections (mail IDLE, keep-alive) switch on their next packet; if one keeps going, restart the app.</p>
+        <h3>Direct apps have no internet while the VPN is on</h3>
+        <p>The VPN kill switch is blocking them. Open Diagnostics or <b>Settings, Helper</b>. If the helper is missing or not allowed, click <b>Install Helper</b> and allow SplitPipe under <i>Allow in the Background</i>. Then click <b>Check Kill Switch Bypass</b>.</p>
+        <h3>A VPN shows up as “VPN utunN”</h3>
+        <p>SplitPipe could not tell which client owns the tunnel. This happens when two VPN clients of a known type run at once. Rename the route; the rule still follows the tunnel.</p>
+        <h3>Known limits</h3>
+        <ul>
+          <li>DNS queries always go by the system route, including for Direct apps.</li>
+          <li>Through AmneziaVPN's kill switch, Direct works over IPv4 only.</li>
+          <li>Other firewalls (Little Snitch, LuLu) see managed connections as belonging to the SplitPipe extension, not to the app.</li>
+          <li>After a restart, rules apply once SplitPipe has started after login.</li>
+          <li>While a VPN reconnects (a fraction of a second), connections on Default may briefly go Direct; they are dropped and reconnect through the VPN when it returns.</li>
+        </ul>
+      </section>
+
+      <section id="uninstall" aria-labelledby="uninstall-h">
+        <h2 id="uninstall-h"><svg class="icon" aria-hidden="true"><use href="assets/icons/sprite.svg#i-trash"/></svg>Uninstall</h2>
+        <p>Open <b>Settings, Advanced, Remove SplitPipe completely</b>. It removes the network extension, the proxy configuration, the helper and its pf rules, then quits. Traffic goes as usual afterwards. Move <b>SplitPipe.app</b> to the Trash yourself.</p>
+        <p>Closing SplitPipe does not stop routing: the extension is a separate process. Turn SplitPipe off with its toggle first if you only want a break.</p>
+      </section>
+    </main>
+  </div>
+</div>
+
+<footer class="foot">
+  <div class="wrap">
+    <a class="brand" href="./" aria-label="SplitPipe home"><img src="assets/icon.svg" alt="" width="30" height="30"><span>SplitPipe</span></a>
+    <span class="copy">© 2026 splitpipe.tech</span>
+    <nav aria-label="Footer">
+      <a href="./">Home</a>
+      <a href="#troubleshooting">Troubleshooting</a>
+      <a href="./#install">Download</a>
+    </nav>
+  </div>
+</footer>
+
+<script src="assets/site.js?v=2" defer></script>
+</body>
+</html>

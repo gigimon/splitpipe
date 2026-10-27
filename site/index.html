@@ -1,0 +1,300 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SplitPipe: a route for every app on your Mac</title>
+<meta name="description" content="SplitPipe for macOS sends each app's traffic where you choose: into a specific VPN, straight out over Wi-Fi around it, or nowhere at all. Works with your VPN's kill switch.">
+<meta name="theme-color" content="#eef0f3">
+<link rel="canonical" href="https://splitpipe.tech/">
+<link rel="icon" href="assets/icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="assets/apple-touch-icon.png">
+<link rel="preload" href="assets/fonts/BigShouldersDisplay-latin.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="assets/fonts/FamiljenGrotesk-latin.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="assets/site.css?v=2">
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+
+<header class="top">
+  <div class="wrap">
+    <a class="brand" href="./" aria-label="SplitPipe home"><img src="assets/icon.svg" alt="" width="30" height="30"><span>SplitPipe</span></a>
+    <nav class="nav" aria-label="Main">
+      <a href="#how">How it works</a>
+      <a href="#features">Features</a>
+      <a href="#kill-switch">Kill switch</a>
+      <a href="docs.html">Docs</a>
+    </nav>
+    <a class="btn sm primary dl" href="#install">Download</a>
+  </div>
+</header>
+
+<main id="main">
+  <section class="hero" aria-labelledby="hero-h">
+    <div class="wrap">
+      <h1 class="display" id="hero-h">Split the pipe.<br> Route each app.</h1>
+      <div class="hero-row">
+        <p class="lead">SplitPipe for macOS sends each app's traffic where you choose: into a specific VPN, straight out over Wi-Fi around it, or nowhere at all.</p>
+        <div class="dl-card">
+          <div class="btn-row">
+            <a class="btn lg primary" href="download/SplitPipe-0.1.0.dmg"><svg class="icon" aria-hidden="true"><use href="assets/icons/sprite.svg#i-download"/></svg>Download for macOS</a>
+            <a class="btn lg" href="docs.html">Read the docs</a>
+          </div>
+          <span class="meta">Version 0.1.0. Requires macOS 26 or later.</span>
+        </div>
+      </div>
+      <div class="hero-device">
+        <img src="assets/mockup/hero-laptop.webp" width="2092" height="1493" fetchpriority="high" alt="SplitPipe's Apps window on a laptop: Opera, Telegram and Yandex Music go Direct, Slack and Jira go through WireGuard “Work”, Safari, Xcode and Spotify use Default, and 1C:Enterprise waits for OpenVPN Office.">
+      </div>
+    </div>
+
+    <div class="pipes">
+      <div class="wrap">
+        <svg class="wide" viewBox="0 0 1120 200" aria-hidden="true" data-pipes>
+          <path id="p-direct" class="pipe direct" stroke-width="10" d="M560 60 C560 124 134 98 134 162 V196"/>
+          <path id="p-vpn" class="pipe vpn" stroke-width="10" d="M560 60 C560 112 418 108 418 150 V196"/>
+          <path id="p-default" class="pipe default" stroke-width="10" d="M560 60 C560 112 702 108 702 150 V196"/>
+          <path id="p-block" class="pipe block" stroke-width="10" d="M560 60 C560 124 986 98 986 150 V164"/>
+          <path class="pipe block" stroke-width="12" d="M968 182 H1004"/>
+          <path class="pipe trunk" stroke-width="16" d="M560 -6 V60"/>
+          <circle class="joint" cx="560" cy="60" r="15" stroke-width="6"/>
+          <g class="packets">
+            <circle class="packet" r="3.2"><animateMotion dur="2.6s" repeatCount="indefinite" begin="0s"><mpath href="#p-direct"/></animateMotion></circle>
+            <circle class="packet" r="3.2"><animateMotion dur="2.6s" repeatCount="indefinite" begin="1.3s"><mpath href="#p-direct"/></animateMotion></circle>
+            <circle class="packet" r="3.2"><animateMotion dur="2.1s" repeatCount="indefinite" begin="0.4s"><mpath href="#p-vpn"/></animateMotion></circle>
+            <circle class="packet" r="3.2"><animateMotion dur="2.1s" repeatCount="indefinite" begin="1.45s"><mpath href="#p-vpn"/></animateMotion></circle>
+            <circle class="packet" r="3.2"><animateMotion dur="2.1s" repeatCount="indefinite" begin="0.8s"><mpath href="#p-default"/></animateMotion></circle>
+            <circle class="packet" r="3.2"><animateMotion dur="2.6s" repeatCount="indefinite" begin="0.2s"><mpath href="#p-block"/></animateMotion></circle>
+          </g>
+        </svg>
+        <ul class="stations" role="list" aria-label="Example routes">
+          <li class="station" style="--c: var(--direct)">
+            <div class="app"><span class="glyph" style="background:#229ed9" aria-hidden="true">T</span>Telegram</div>
+            <span class="chip direct">Direct</span>
+            <p>Out through Wi-Fi, around the VPN.</p>
+          </li>
+          <li class="station" style="--c: var(--vpn)">
+            <div class="app"><span class="glyph" style="background:#4a154b" aria-hidden="true">#</span>Slack</div>
+            <span class="chip vpn">WireGuard “Work”</span>
+            <p>Into the work tunnel, and only that one.</p>
+          </li>
+          <li class="station" style="--c: var(--default)">
+            <div class="app"><span class="glyph" style="background:#1d7cf2" aria-hidden="true">S</span>Safari</div>
+            <span class="chip">Default</span>
+            <p>Wherever macOS sends traffic now.</p>
+          </li>
+          <li class="station" style="--c: var(--block)">
+            <div class="app"><span class="glyph" style="background:#1b2838" aria-hidden="true">S</span>Steam</div>
+            <span class="chip block">Block</span>
+            <p>No network at all.</p>
+          </li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <section class="section tight" id="how" aria-labelledby="how-h">
+    <div class="wrap">
+      <div class="section-head reveal">
+        <h2 class="display" id="how-h">One pipe in. A route per app out.</h2>
+        <p class="sub">A VPN normally takes all of your Mac's traffic. SplitPipe looks at every new connection and sends it through the route you picked for that app.</p>
+      </div>
+      <ol class="steps reveal">
+        <li>
+          <h3>Intercept</h3>
+          <p>A macOS network extension sees each new connection and knows which app opened it, including WebKit and helper processes.</p>
+        </li>
+        <li>
+          <h3>Decide</h3>
+          <p>SplitPipe finds the app's rule. If that route is down, the rule's fallback decides: block, default route, or another VPN.</p>
+        </li>
+        <li>
+          <h3>Send</h3>
+          <p>The connection leaves through that route's interface: the right VPN tunnel, or Wi-Fi and Ethernet around it.</p>
+        </li>
+      </ol>
+    </div>
+  </section>
+
+  <section class="section" id="features" aria-labelledby="features-h">
+    <div class="wrap">
+      <div class="section-head reveal">
+        <h2 class="display" id="features-h">Routing that holds when a VPN drops</h2>
+        <p class="sub">Rules follow the role of a route, not an interface name, so they survive reconnects, network changes and sleep.</p>
+      </div>
+      <div class="bento">
+        <article class="cell shot c-4 r-2">
+          <h3><svg class="icon lg" aria-hidden="true"><use href="assets/icons/sprite.svg#i-route"/></svg>A rule per app</h3>
+          <p>One menu per app: Default, Direct, any of your VPNs, or Block. Changing a rule drops the app's old connections, so the new route applies at once.</p>
+          <figure>
+            <img src="assets/shots/menu-crop.webp" width="1140" height="514" loading="lazy" alt="The route menu for Telegram: Default, Direct over Wi-Fi on en1, Amnezia VPN on utun4, WireGuard “Work” on utun6, OpenVPN Office shown as disconnected, and Block.">
+          </figure>
+        </article>
+        <article class="cell c-2">
+          <h3><svg class="icon lg" aria-hidden="true"><use href="assets/icons/sprite.svg#i-shield"/></svg>Every VPN is a route</h3>
+          <p>AmneziaVPN, WireGuard, OpenVPN and macOS VPN services are found on their own. Send one app through the work VPN and another through yours.</p>
+          <div class="chips"><span class="chip vpn">Amnezia VPN</span><span class="chip vpn">WireGuard “Work”</span></div>
+        </article>
+        <article class="cell c-2">
+          <h3><svg class="icon lg" aria-hidden="true"><use href="assets/icons/sprite.svg#i-timer"/></svg>Temporary routes</h3>
+          <p>Switch an app for a while. When the time is up, its rule comes back on its own.</p>
+          <div class="chips"><span class="chip plain">15 min</span><span class="chip plain">1 hour</span><span class="chip plain">Until the app quits</span><span class="chip plain">Until the VPN disconnects</span></div>
+        </article>
+        <article class="cell c-3 outage" data-outage>
+          <h3><svg class="icon lg" aria-hidden="true"><use href="assets/icons/sprite.svg#i-fallback"/></svg>When a route goes down</h3>
+          <p>Each rule says what happens if its VPN disconnects. Try it for Slack on WireGuard “Work”:</p>
+          <div class="seg" role="group" aria-label="If the route is unavailable">
+            <button type="button" aria-pressed="true" data-mode="block">Block</button>
+            <button type="button" aria-pressed="false" data-mode="default">Default route</button>
+            <button type="button" aria-pressed="false" data-mode="fallback">Fallback route</button>
+          </div>
+          <svg viewBox="0 0 520 132" aria-hidden="true">
+            <path class="pipe trunk" stroke-width="10" d="M14 66 H150"/>
+            <path class="pipe vpn" stroke-width="10" stroke-dasharray="1 17" opacity="0.5" d="M196 66 H506"/>
+            <g class="lane" data-lane="block"><path class="pipe block" stroke-width="10" d="M150 66 H164"/><path class="pipe block" stroke-width="10" d="M176 46 V86"/></g>
+            <g class="lane off" data-lane="default"><path class="pipe default" stroke-width="10" d="M150 66 C178 66 172 112 210 112 H506"/></g>
+            <g class="lane off" data-lane="fallback"><path class="pipe vpn" stroke-width="10" d="M150 66 C178 66 172 20 210 20 H506"/></g>
+            <circle class="joint" cx="150" cy="66" r="9" stroke-width="5"/>
+          </svg>
+          <p class="result" aria-live="polite" data-result>Slack gets no network until WireGuard “Work” is back. Nothing leaves through another route.</p>
+        </article>
+        <article class="cell c-3">
+          <h3><svg class="icon lg" aria-hidden="true"><use href="assets/icons/sprite.svg#i-list"/></svg>IP lists</h3>
+          <p>Subnets from a file or a URL get their own route. URLs refresh daily, and the first list that matches wins.</p>
+          <pre class="snippet"><span class="c"># office.txt</span>
+10.20.0.0/16
+192.0.2.7
+2001:db8::/32   <span class="c">; IPv6 works too</span></pre>
+        </article>
+        <article class="cell c-3">
+          <h3><svg class="icon lg" aria-hidden="true"><use href="assets/icons/sprite.svg#i-bell"/></svg>New apps</h3>
+          <p>Get a notification when an app goes online for the first time, with buttons for Default, Direct or a VPN. Or give every new app a route right away.</p>
+        </article>
+        <article class="cell c-3">
+          <h3><svg class="icon lg" aria-hidden="true"><use href="assets/icons/sprite.svg#i-code"/></svg>Command-line programs</h3>
+          <p><code>curl</code>, <code>git</code>, <code>ssh</code> and Homebrew tools get rules by path, so they keep their route after an upgrade.</p>
+        </article>
+      </div>
+    </div>
+  </section>
+
+  <section class="section tight" id="kill-switch" aria-labelledby="ks-h">
+    <div class="wrap">
+      <div class="band reveal">
+        <div>
+          <h2 class="display" id="ks-h">Works with your VPN's kill switch</h2>
+          <p class="sub">A kill switch blocks everything outside the tunnel, so nothing leaks when the VPN drops. It also blocks the apps you send Direct. SplitPipe's helper opens one narrow gap in it, for SplitPipe alone.</p>
+          <ul class="checks">
+            <li><svg class="icon" aria-hidden="true"><use href="assets/icons/sprite.svg#i-check"/></svg>Direct apps keep working while the kill switch is on.</li>
+            <li><svg class="icon" aria-hidden="true"><use href="assets/icons/sprite.svg#i-check"/></svg>Everything else stays behind the VPN.</li>
+            <li><svg class="icon" aria-hidden="true"><use href="assets/icons/sprite.svg#i-check"/></svg>The gap comes back after sleep, network changes and reconnects.</li>
+            <li><svg class="icon" aria-hidden="true"><use href="assets/icons/sprite.svg#i-check"/></svg>Diagnostics shows whether the bypass is in effect.</li>
+          </ul>
+          <p style="margin:28px 0 0"><a class="link-arrow" href="docs.html#kill-switch">How SplitPipe works with a kill switch<svg class="icon" aria-hidden="true"><use href="assets/icons/sprite.svg#i-arrow"/></svg></a></p>
+        </div>
+        <div>
+          <div class="toggle-stage" data-turntable="assets/3d/toggle-switch-sprite.webp" data-frames="21">
+            <img src="assets/3d/toggle-switch.webp" width="440" height="440" loading="lazy" alt="A metal toggle switch, the kill switch.">
+          </div>
+          <div class="cap">
+            <span class="chip vpn">VPN tunnel passes</span>
+            <span class="chip direct">SplitPipe Direct passes</span>
+            <span class="chip block">The rest is blocked</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="section" id="visibility" aria-labelledby="vis-h">
+    <div class="wrap">
+      <div class="section-head reveal">
+        <h2 class="display" id="vis-h">See where traffic really goes</h2>
+        <p class="sub">A live feed of connections, traffic by route and app, and checks that lead to the fix.</p>
+      </div>
+      <div class="tabs" role="tablist" aria-label="App sections" data-tabs>
+        <button type="button" role="tab" id="t-conns" aria-controls="v-conns" aria-selected="true"><svg class="icon" aria-hidden="true"><use href="assets/icons/sprite.svg#i-pulse"/></svg>Connections</button>
+        <button type="button" role="tab" id="t-stats" aria-controls="v-stats" aria-selected="false" tabindex="-1"><svg class="icon" aria-hidden="true"><use href="assets/icons/sprite.svg#i-graph"/></svg>Statistics</button>
+        <button type="button" role="tab" id="t-diag" aria-controls="v-diag" aria-selected="false" tabindex="-1"><svg class="icon" aria-hidden="true"><use href="assets/icons/sprite.svg#i-wrench"/></svg>Diagnostics</button>
+        <button type="button" role="tab" id="t-routes" aria-controls="v-routes" aria-selected="false" tabindex="-1"><svg class="icon" aria-hidden="true"><use href="assets/icons/sprite.svg#i-signal"/></svg>Routes</button>
+      </div>
+      <div class="viewer">
+        <div>
+          <div class="panel" role="tabpanel" id="v-conns" aria-labelledby="t-conns">
+            <figure><img src="assets/shots/conns.webp" width="2244" height="1504" loading="lazy" alt="The Connections feed: time, app, address and host, protocol, the route each connection took, and traffic."></figure>
+          </div>
+          <div class="panel" role="tabpanel" id="v-stats" aria-labelledby="t-stats" hidden>
+            <figure><img src="assets/shots/stats.webp" width="2244" height="1504" loading="lazy" alt="Statistics: traffic totals, a chart by route, and lists of routes and apps."></figure>
+          </div>
+          <div class="panel" role="tabpanel" id="v-diag" aria-labelledby="t-diag" hidden>
+            <figure><img src="assets/shots/diag.webp" width="2244" height="1504" loading="lazy" alt="Diagnostics: checks for the extension, the helper, each route, the kill switch and DNS, with Fix buttons."></figure>
+          </div>
+          <div class="panel" role="tabpanel" id="v-routes" aria-labelledby="t-routes" hidden>
+            <figure><img src="assets/shots/routes.webp" width="2244" height="1504" loading="lazy" alt="Routes: Wi-Fi and each VPN with its interface, IP addresses and the apps that use it."></figure>
+          </div>
+        </div>
+        <div class="caption" data-captions>
+          <div data-for="v-conns"><h3>Live connections</h3><p>Every connection with its app, address, protocol, the route it really took and its traffic. Connections that go around SplitPipe are flagged as bypassing it.</p></div>
+          <div data-for="v-stats" hidden><h3>Statistics</h3><p>Traffic by route and by app for the last hour, today, 7 or 30 days. The extension keeps 30 days of it.</p></div>
+          <div data-for="v-diag" hidden><h3>Diagnostics</h3><p>Checks the extension, the helper, each route's external IP, the kill switch and DNS. Problems come with a Fix button.</p></div>
+          <div data-for="v-routes" hidden><h3>Routes</h3><p>Every route SplitPipe found, with its interface, local and external IP, and the apps that use it. Test Connection checks TCP and UDP.</p></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="section tight" id="control" aria-labelledby="control-h">
+    <div class="wrap split">
+      <figure class="reveal">
+        <img src="assets/shots/menubar.webp" width="848" height="1096" loading="lazy" alt="The SplitPipe menu in the menu bar: status, connected VPNs, the active app's route and the list of rules.">
+      </figure>
+      <div>
+        <h2 class="display" id="control-h">Switch routes without opening a window</h2>
+        <ul class="rows">
+          <li><svg class="icon" aria-hidden="true"><use href="assets/icons/sprite.svg#i-menubar"/></svg><div><h3>Menu bar</h3><p>Status, connected VPNs, the frontmost app's route and all your rules, one click away.</p></div></li>
+          <li><svg class="icon" aria-hidden="true"><use href="assets/icons/sprite.svg#i-widget"/></svg><div><h3>Widget and Control Center</h3><p>Status, VPNs, problems and today's traffic on the desktop, and a SplitPipe toggle in Control Center.</p></div></li>
+          <li><svg class="icon" aria-hidden="true"><use href="assets/icons/sprite.svg#i-flow"/></svg><div><h3>Shortcuts and links</h3><p>Shortcuts actions and <code>splitpipe://</code> links turn SplitPipe on and off or set an app's route, for good or for a while.</p></div></li>
+          <li><svg class="icon" aria-hidden="true"><use href="assets/icons/sprite.svg#i-keyboard"/></svg><div><h3>Hotkeys</h3><p>Toggle SplitPipe, or open the route menu for the frontmost app right at the pointer.</p></div></li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <section class="section" id="install" aria-labelledby="install-h">
+    <div class="wrap">
+      <div class="install reveal">
+        <div>
+          <h2 class="display" id="install-h">Install SplitPipe</h2>
+          <p class="sub">Move SplitPipe to Applications and open it. It asks for three system permissions, one at a time, then sets itself up.</p>
+          <div class="btn-row">
+            <a class="btn lg primary" href="download/SplitPipe-0.1.0.dmg"><svg class="icon" aria-hidden="true"><use href="assets/icons/sprite.svg#i-download"/></svg>Download SplitPipe 0.1.0</a>
+            <a class="link-arrow" href="docs.html#install">Installation guide<svg class="icon" aria-hidden="true"><use href="assets/icons/sprite.svg#i-arrow"/></svg></a>
+          </div>
+        </div>
+        <dl class="specs">
+          <dt>System</dt><dd>macOS 26 Tahoe or later</dd>
+          <dt>Permissions</dt><dd>Network extension, proxy configuration, background helper</dd>
+          <dt>VPN clients</dt><dd>AmneziaVPN, WireGuard, OpenVPN and Network Extension VPNs</dd>
+          <dt>Languages</dt><dd>English and Russian, following the system language</dd>
+          <dt>Uninstall</dt><dd>One button in Settings removes the extension, the helper and its pf rules</dd>
+        </dl>
+      </div>
+    </div>
+  </section>
+</main>
+
+<footer class="foot">
+  <div class="wrap">
+    <a class="brand" href="./" aria-label="SplitPipe home"><img src="assets/icon.svg" alt="" width="30" height="30"><span>SplitPipe</span></a>
+    <span class="copy">© 2026 splitpipe.tech</span>
+    <nav aria-label="Footer">
+      <a href="docs.html">Documentation</a>
+      <a href="docs.html#troubleshooting">Troubleshooting</a>
+      <a href="#install">Download</a>
+    </nav>
+  </div>
+</footer>
+
+<script src="assets/site.js?v=2" defer></script>
+</body>
+</html>

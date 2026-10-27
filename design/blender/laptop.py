@@ -1,201 +1,324 @@
-# Blender: a generic thin laptop, front view, with the SplitPipe screenshot on the screen.
-# Run: blender -b -P laptop.py -- <screen.png> <out.png> <samples>
-import bpy, bmesh, sys, math
+# Blender: a thin 13-inch notebook in the MacBook Air style, front view, with the SplitPipe screenshot on screen.
+# Run: blender -b -P laptop.py -- <screen.png> <out.png> <samples> [width]
+# Lighting uses Blender's bundled studio.exr (CC0, Poly Haven).
+import bpy, bmesh, sys, math, os, glob
 from mathutils import Vector
 
 argv = sys.argv[sys.argv.index("--") + 1:]
 SCREEN, OUT, SAMPLES = argv[0], argv[1], int(argv[2])
+RES_X = int(argv[3]) if len(argv) > 3 else 2400
 
 bpy.ops.wm.read_factory_settings(use_empty=True)
 scene = bpy.context.scene
 cm = 0.01
 
-def rounded_slab(name, w, d, h, r, edge=0.0):
-    """Box w x d x h (x, y, z) with corners of radius r rounded in the x/z plane (the face plane)."""
-    bm = bmesh.new()
-    bmesh.ops.create_cube(bm, size=1.0)
-    for v in bm.verts:
-        v.co = Vector((v.co.x * w, v.co.y * d, v.co.z * h))
-    edges = [e for e in bm.edges if abs((e.verts[0].co - e.verts[1].co).normalized().y) > 0.99]
-    bmesh.ops.bevel(bm, geom=edges, offset=r, segments=16, affect='EDGES', profile=0.5)
-    if edge > 0:
-        bmesh.ops.bevel(bm, geom=list(bm.edges), offset=edge, segments=3, affect='EDGES', profile=0.5, clamp_overlap=True)
-    me = bpy.data.meshes.new(name)
-    bm.to_mesh(me)
-    bm.free()
-    ob = bpy.data.objects.new(name, me)
-    scene.collection.objects.link(ob)
-    for p in me.polygons:
-        p.use_smooth = True
-    return ob
-
-def mat(name, color, metal=0.0, rough=0.5, coat=0.0):
-    m = bpy.data.materials.new(name)
-    m.use_nodes = True
-    b = m.node_tree.nodes["Principled BSDF"]
-    b.inputs["Base Color"].default_value = (*color, 1)
-    b.inputs["Metallic"].default_value = metal
-    b.inputs["Roughness"].default_value = rough
-    if coat:
-        b.inputs["Coat Weight"].default_value = coat
-    return m
+# ---------- helpers ----------
 
 def srgb(h):
     h = h.lstrip('#')
     c = [int(h[i:i + 2], 16) / 255 for i in (0, 2, 4)]
     return tuple(((x + 0.055) / 1.055) ** 2.4 if x > 0.04045 else x / 12.92 for x in c)
 
-alu = mat("Anodized", srgb("#1a202c"), metal=0.9, rough=0.55)
-alu_dark = mat("AnodizedDark", srgb("#1c2230"), metal=1.0, rough=0.45)
-glass = mat("Bezel", srgb("#050608"), rough=0.22)
-glass.node_tree.nodes["Principled BSDF"].inputs["Specular IOR Level"].default_value = 0.25
-black = mat("Black", srgb("#010101"), rough=1.0)
-black.node_tree.nodes["Principled BSDF"].inputs["Specular IOR Level"].default_value = 0.0
+def rrect(w, h, radii, seg=18):
+    """Points of a rounded rectangle centred at 0, counter-clockwise. radii = (tl, tr, br, bl)."""
+    tl, tr, br, bl = radii
+    pts = []
+    def arc(cx, cy, r, a0, a1):
+        if r <= 0:
+            pts.append((cx, cy))
+            return
+        for i in range(seg + 1):
+            a = math.radians(a0 + (a1 - a0) * i / seg)
+            pts.append((cx + r * math.cos(a), cy + r * math.sin(a)))
+    x, y = w / 2, h / 2
+    arc(x - br, -y + br, br, -90, 0)
+    arc(x - tr, y - tr, tr, 0, 90)
+    arc(-x + tl, y - tl, tl, 90, 180)
+    arc(-x + bl, -y + bl, bl, 180, 270)
+    return pts
 
-# Laptop dimensions (roughly a 13-inch thin notebook)
-W, LID_H, LID_T = 30.4 * cm, 20.6 * cm, 0.45 * cm
-BASE_D, BASE_T = 21.4 * cm, 0.95 * cm
-OPEN = math.radians(6)  # lid tilt back from vertical
+def prism(name, pts, depth, plane='XZ', bevel=0.0, bevel_seg=4, smooth_sides=True):
+    """Extrude a 2D outline. plane XZ: outline in x/z, depth along +y. plane XY: outline in x/y, depth along +z."""
+    bm = bmesh.new()
+    def v(p, d):
+        return Vector((p[0], d, p[1])) if plane == 'XZ' else Vector((p[0], p[1], d))
+    a = [bm.verts.new(v(p, 0)) for p in pts]
+    b = [bm.verts.new(v(p, depth)) for p in pts]
+    n = len(pts)
+    f1 = bm.faces.new(a)
+    f2 = bm.faces.new(list(reversed(b)))
+    sides = []
+    for i in range(n):
+        j = (i + 1) % n
+        sides.append(bm.faces.new((a[i], a[j], b[j], b[i])))
+    bmesh.ops.recalc_face_normals(bm, faces=bm.faces[:])
+    for f in sides:
+        f.smooth = smooth_sides
+    me = bpy.data.meshes.new(name)
+    bm.to_mesh(me)
+    bm.free()
+    ob = bpy.data.objects.new(name, me)
+    scene.collection.objects.link(ob)
+    if bevel > 0:
+        m = ob.modifiers.new("Bevel", 'BEVEL')
+        m.width = bevel
+        m.segments = bevel_seg
+        m.limit_method = 'ANGLE'
+        m.angle_limit = math.radians(40)
+        m.harden_normals = True
+        m.use_clamp_overlap = True
+    return ob
 
-# Base: lying on z=0, front edge at y=0, back edge at y=BASE_D
-base = rounded_slab("Base", W, BASE_T, BASE_D, 1.4 * cm, edge=0.12 * cm)
-base.rotation_euler = (math.radians(90), 0, 0)
-base.location = (0, BASE_D / 2, BASE_T / 2)
+def flat_face(name, pts, uv=None):
+    """Single n-gon in the XZ plane facing -y, with planar UVs when uv=(w, h)."""
+    bm = bmesh.new()
+    vs = [bm.verts.new(Vector((p[0], 0, p[1]))) for p in pts]
+    f = bm.faces.new(vs)
+    f.normal_update()
+    if f.normal.y > 0:
+        f.normal_flip()
+    if uv:
+        layer = bm.loops.layers.uv.new()
+        w, h = uv
+        for loop in f.loops:
+            loop[layer].uv = (loop.vert.co.x / w + 0.5, loop.vert.co.z / h + 0.5)
+    me = bpy.data.meshes.new(name)
+    bm.to_mesh(me)
+    bm.free()
+    ob = bpy.data.objects.new(name, me)
+    scene.collection.objects.link(ob)
+    return ob
+
+def principled(name, color, metal=0.0, rough=0.5, spec=0.5, aniso=0.0):
+    m = bpy.data.materials.new(name)
+    m.use_nodes = True
+    b = m.node_tree.nodes["Principled BSDF"]
+    b.inputs["Base Color"].default_value = (*srgb(color), 1)
+    b.inputs["Metallic"].default_value = metal
+    b.inputs["Roughness"].default_value = rough
+    b.inputs["Specular IOR Level"].default_value = spec
+    if aniso:
+        b.inputs["Anisotropic"].default_value = aniso
+    return m
+
+# ---------- materials ----------
+
+alu = principled("Aluminium", "#86898f", metal=1.0, rough=0.36)          # space grey, bead-blasted
+alu_edge = principled("AluminiumEdge", "#c9cbcf", metal=1.0, rough=0.18)  # diamond-cut edges read brighter
+glass = principled("BezelGlass", "#020203", rough=0.14, spec=0.18)
+black = principled("NotchBlack", "#000000", rough=1.0, spec=0.0)
+lens = principled("Lens", "#14181f", metal=0.0, rough=0.15, spec=0.8)
+hinge_m = principled("Hinge", "#0b0c0e", metal=0.0, rough=0.7, spec=0.2)
+foot_m = principled("Feet", "#111214", rough=0.8)
+
+# ---------- dimensions (13-inch class) ----------
+
+W = 30.41 * cm
+LID_H = 21.5 * cm - 0.6 * cm
+LID_T = 0.39 * cm
+BASE_D = 21.5 * cm
+BASE_T = 0.75 * cm
+R_LID = 1.05 * cm
+OPEN = math.radians(12)  # lid leans back from vertical
+
+# Base: outline in x/y (top view), thickness up +z
+base = prism("Base", rrect(W, BASE_D, (R_LID,) * 4), BASE_T, plane='XY', bevel=0.16 * cm, bevel_seg=6)
+base.location = (0, BASE_D / 2, 0.12 * cm)
 base.data.materials.append(alu)
 
-# Lid pivot at the back top edge of the base
+# Thumb cut in the front edge
+bpy.ops.mesh.primitive_cylinder_add(radius=2.3 * cm, depth=1.2 * cm, location=(0, -1.95 * cm, BASE_T + 0.38 * cm), vertices=96)
+cut = bpy.context.object
+cut.rotation_euler = (math.radians(90), 0, 0)
+cut.scale = (1, 0.42, 1)
+cut.location = (0, 0.05 * cm, BASE_T + 0.12 * cm + 0.6 * cm)
+cut.hide_render = cut.hide_viewport = True
+mod = base.modifiers.new("Thumb", 'BOOLEAN')
+mod.object = cut
+mod.operation = 'DIFFERENCE'
+base.modifiers.move(base.modifiers.find("Thumb"), 0)
+
+# Feet
+for x in (-W / 2 + 2.2 * cm, W / 2 - 2.2 * cm):
+    for y in (2.0 * cm, BASE_D - 2.0 * cm):
+        bpy.ops.mesh.primitive_cylinder_add(radius=0.55 * cm, depth=0.12 * cm, location=(x, y, 0.06 * cm))
+        bpy.context.object.data.materials.append(foot_m)
+
+# Keyboard deck: a dark key field near the hinge and a glass trackpad at the front
+deck_z = 0.12 * cm + BASE_T + 0.0006
+keys_m = principled("Keys", "#0d0e10", rough=0.55, spec=0.3)
+pad_m = principled("Trackpad", "#7d8086", metal=0.6, rough=0.22)
+bpy.ops.mesh.primitive_plane_add(size=1)
+keys = bpy.context.object
+keys.scale = (27.6 * cm, 10.2 * cm, 1)
+keys.location = (0, BASE_D - 1.3 * cm - 5.1 * cm, deck_z)
+keys.data.materials.append(keys_m)
+# Key gaps as thin lighter lines so the field reads as keys from a low angle
+for row in range(6):
+    bpy.ops.mesh.primitive_plane_add(size=1)
+    gap = bpy.context.object
+    gap.scale = (27.6 * cm, 0.12 * cm, 1)
+    gap.location = (0, BASE_D - 1.3 * cm - 0.2 * cm - row * 1.75 * cm, deck_z + 0.0002)
+    gap.data.materials.append(principled("KeyGap", "#33363c", metal=0.8, rough=0.4))
+bpy.ops.mesh.primitive_plane_add(size=1)
+pad = bpy.context.object
+pad.scale = (13.4 * cm, 8.1 * cm, 1)
+pad.location = (0, 1.2 * cm + 4.05 * cm, deck_z)
+pad.data.materials.append(pad_m)
+
+# Hinge barrel behind the lid foot
+bpy.ops.mesh.primitive_cylinder_add(radius=0.33 * cm, depth=W - 6 * cm, location=(0, BASE_D - 0.55 * cm, BASE_T + 0.32 * cm), rotation=(0, math.radians(90), 0), vertices=48)
+hinge = bpy.context.object
+hinge.data.materials.append(hinge_m)
+for p in hinge.data.polygons:
+    p.use_smooth = True
+
+# Lid group, pivoting at the back of the base
 pivot = bpy.data.objects.new("LidPivot", None)
 scene.collection.objects.link(pivot)
-pivot.location = (0, BASE_D - 0.3 * cm, BASE_T + 0.05 * cm)
+pivot.location = (0, BASE_D - 0.5 * cm, BASE_T + 0.32 * cm)
 pivot.rotation_euler = (-OPEN, 0, 0)
 
-lid = rounded_slab("Lid", W, LID_T, LID_H, 1.1 * cm, edge=0.1 * cm)
-lid.parent = pivot
-lid.location = (0, LID_T / 2, LID_H / 2)
+def on_lid(ob, z_bottom=0.0):
+    ob.parent = pivot
+    return ob
+
+# Lid shell: outline in x/z, thickness toward +y (away from the viewer)
+lid = prism("Lid", rrect(W, LID_H, (R_LID, R_LID, 0.5 * cm, 0.5 * cm)), LID_T, plane='XZ', bevel=0.09 * cm, bevel_seg=5)
+lid.location = (0, -LID_T * 0.15, LID_H / 2 + 0.25 * cm)
 lid.data.materials.append(alu)
+on_lid(lid)
 
-# Black glass front of the lid (faces -y, toward the camera)
-front = rounded_slab("Glass", W - 0.05 * cm, 0.04 * cm, LID_H - 0.05 * cm, 1.08 * cm)
-front.parent = pivot
-front.location = (0, -0.01 * cm, LID_H / 2)
-front.data.materials.append(glass)
+# Black glass, inset by the thin aluminium rim
+RIM = 0.07 * cm
+GLASS_H = LID_H - 2 * RIM
+gl = flat_face("Glass", rrect(W - 2 * RIM, GLASS_H, (R_LID - RIM, R_LID - RIM, 0.45 * cm, 0.45 * cm)))
+gl.location = (0, -LID_T * 0.15 - 0.004 * cm, LID_H / 2 + 0.25 * cm)
+gl.data.materials.append(glass)
+on_lid(gl)
 
-# Screen: active area 2560x1664 (1.538:1)
-SW = W - 2 * 0.85 * cm
-SH = SW / (2560 / 1664)
-bpy.ops.mesh.primitive_plane_add(size=1)
-scr = bpy.context.object
-scr.name = "Screen"
-scr.scale = (SW, SH, 1)
-scr.rotation_euler = (math.radians(90), 0, 0)
-scr.parent = pivot
-top_bezel = 0.75 * cm
-scr.location = (0, -0.035 * cm, LID_H - top_bezel - SH / 2)
-sm = bpy.data.materials.new("ScreenMat")
+# Display: 2560 x 1664, rounded top corners
+SIDE = 0.52 * cm
+SW = W - 2 * SIDE
+SH = SW * 1664 / 2560
+TOP = 0.62 * cm
+disp_top = LID_H + 0.25 * cm - RIM - TOP
+disp = flat_face("Display", rrect(SW, SH, (0.62 * cm, 0.62 * cm, 0.02 * cm, 0.02 * cm)), uv=(SW, SH))
+disp.location = (0, -LID_T * 0.15 - 0.008 * cm, disp_top - SH / 2)
+on_lid(disp)
+sm = bpy.data.materials.new("DisplayMat")
 sm.use_nodes = True
 nt = sm.node_tree
 for n in list(nt.nodes):
     nt.nodes.remove(n)
+uvn = nt.nodes.new("ShaderNodeUVMap")
 tex = nt.nodes.new("ShaderNodeTexImage")
 tex.image = bpy.data.images.load(SCREEN)
 tex.interpolation = 'Cubic'
 emit = nt.nodes.new("ShaderNodeEmission")
 emit.inputs["Strength"].default_value = 1.0
 gloss = nt.nodes.new("ShaderNodeBsdfGlossy")
-gloss.inputs["Roughness"].default_value = 0.05
-gloss.inputs["Color"].default_value = (1, 1, 1, 1)
-fres = nt.nodes.new("ShaderNodeFresnel")
-fres.inputs["IOR"].default_value = 1.5
+gloss.inputs["Roughness"].default_value = 0.04
+lw = nt.nodes.new("ShaderNodeLayerWeight")
+lw.inputs["Blend"].default_value = 0.12
 mix = nt.nodes.new("ShaderNodeMixShader")
-add_mul = nt.nodes.new("ShaderNodeMath")
-add_mul.operation = 'MULTIPLY'
-add_mul.inputs[1].default_value = 0.35
-out = nt.nodes.new("ShaderNodeOutputMaterial")
+fac = nt.nodes.new("ShaderNodeMath")
+fac.operation = 'MULTIPLY'
+fac.inputs[1].default_value = 0.35
+outn = nt.nodes.new("ShaderNodeOutputMaterial")
+nt.links.new(uvn.outputs["UV"], tex.inputs["Vector"])
 nt.links.new(tex.outputs["Color"], emit.inputs["Color"])
-nt.links.new(fres.outputs["Fac"], add_mul.inputs[0])
-nt.links.new(add_mul.outputs[0], mix.inputs["Fac"])
+nt.links.new(lw.outputs["Fresnel"], fac.inputs[0])
+nt.links.new(fac.outputs[0], mix.inputs["Fac"])
 nt.links.new(emit.outputs[0], mix.inputs[1])
 nt.links.new(gloss.outputs[0], mix.inputs[2])
-nt.links.new(mix.outputs[0], out.inputs["Surface"])
-scr.data.materials.append(sm)
+nt.links.new(mix.outputs[0], outn.inputs["Surface"])
+disp.data.materials.append(sm)
 
-# UVs of a default plane already map 0..1; flip nothing.
-
-# Notch over the top centre of the screen
-notch = rounded_slab("Notch", 3.1 * cm, 0.02 * cm, 0.62 * cm * 2, 0.28 * cm)
-notch.parent = pivot
-notch.location = (0, -0.05 * cm, LID_H - top_bezel)
+# Notch with the camera lens
+NW, NH = 3.2 * cm, 0.62 * cm
+notch = flat_face("Notch", rrect(NW, NH, (0, 0, 0.26 * cm, 0.26 * cm)))
+notch.location = (0, -LID_T * 0.15 - 0.012 * cm, disp_top - NH / 2 + 0.002 * cm)
 notch.data.materials.append(black)
-for p_ in notch.data.polygons:
-    p_.use_smooth = False
+on_lid(notch)
+bpy.ops.mesh.primitive_circle_add(radius=0.085 * cm, fill_type='NGON', vertices=32, rotation=(math.radians(90), 0, 0))
+cam_lens = bpy.context.object
+cam_lens.location = (0, -LID_T * 0.15 - 0.016 * cm, disp_top + 0.3 * cm)
+cam_lens.data.materials.append(lens)
+on_lid(cam_lens)
 
-# Hinge shadow strip
-bpy.ops.mesh.primitive_cylinder_add(radius=0.32 * cm, depth=W - 3.2 * cm, rotation=(0, math.radians(90), 0))
-hinge = bpy.context.object
-hinge.location = (0, BASE_D - 0.35 * cm, BASE_T + 0.05 * cm)
-hinge.data.materials.append(alu_dark)
-
-# Front thumb cut on the base
-bpy.ops.mesh.primitive_cylinder_add(radius=1.6 * cm, depth=0.5 * cm, location=(0, -0.95 * cm, BASE_T + 0.02 * cm))
-cut = bpy.context.object
-cut.scale = (1, 0.7, 1)
-mod = base.modifiers.new("Thumb", 'BOOLEAN')
-mod.object = cut
-mod.operation = 'DIFFERENCE'
-cut.hide_render = True
-cut.hide_viewport = True
-
-# Shadow catcher floor
-bpy.ops.mesh.primitive_plane_add(size=2, location=(0, BASE_D / 2, 0))
+# Small shadow-catcher floor, only as large as the contact shadow needs
+bpy.ops.mesh.primitive_plane_add(size=1, location=(0, BASE_D / 2, 0))
 floor = bpy.context.object
+floor.scale = (W * 1.6, BASE_D * 1.8, 1)
 floor.is_shadow_catcher = True
 
-# Lighting: soft studio
+# ---------- light ----------
+
 world = bpy.data.worlds.new("World")
 scene.world = world
 world.use_nodes = True
-bg = world.node_tree.nodes["Background"]
-grad = world.node_tree.nodes.new("ShaderNodeTexGradient")
-coord = world.node_tree.nodes.new("ShaderNodeTexCoord")
-mapn = world.node_tree.nodes.new("ShaderNodeMapping")
-mapn.inputs["Rotation"].default_value = (0, math.radians(-90), 0)
-ramp = world.node_tree.nodes.new("ShaderNodeValToRGB")
-ramp.color_ramp.elements[0].color = (0.02, 0.025, 0.035, 1)
-ramp.color_ramp.elements[1].color = (0.32, 0.35, 0.42, 1)
-world.node_tree.links.new(coord.outputs["Generated"], mapn.inputs["Vector"])
-world.node_tree.links.new(mapn.outputs["Vector"], grad.inputs["Vector"])
-world.node_tree.links.new(grad.outputs["Fac"], ramp.inputs["Fac"])
-world.node_tree.links.new(ramp.outputs["Color"], bg.inputs["Color"])
-bg.inputs["Strength"].default_value = 0.6
+wn = world.node_tree
+bg = wn.nodes["Background"]
+env = wn.nodes.new("ShaderNodeTexEnvironment")
+hdr = glob.glob(os.path.join(os.path.dirname(bpy.app.binary_path), "..", "Resources", "*", "datafiles", "studiolights", "world", "studio.exr"))
+env.image = bpy.data.images.load(hdr[0])
+mapping = wn.nodes.new("ShaderNodeMapping")
+coord = wn.nodes.new("ShaderNodeTexCoord")
+mapping.inputs["Rotation"].default_value = (0, 0, math.radians(200))
+wn.links.new(coord.outputs["Generated"], mapping.inputs["Vector"])
+wn.links.new(mapping.outputs["Vector"], env.inputs["Vector"])
+wn.links.new(env.outputs["Color"], bg.inputs["Color"])
+bg.inputs["Strength"].default_value = 0.4
 
-def area(name, loc, rot, size, power):
+def softbox(name, loc, size, power, target=(0, 0.1, 0.1)):
     l = bpy.data.lights.new(name, 'AREA')
-    l.size = size
+    l.shape = 'RECTANGLE'
+    l.size, l.size_y = size
     l.energy = power
     o = bpy.data.objects.new(name, l)
     o.location = loc
-    o.rotation_euler = rot
     scene.collection.objects.link(o)
+    o.rotation_euler = (Vector(target) - Vector(loc)).to_track_quat('-Z', 'Y').to_euler()
 
-area("Key", (-0.45, -0.55, 0.65), (math.radians(55), 0, math.radians(-40)), 0.6, 220)
-area("Fill", (0.55, -0.45, 0.35), (math.radians(65), 0, math.radians(50)), 0.8, 90)
-area("Top", (0, 0.1, 0.9), (0, 0, 0), 1.0, 55)
+softbox("TopStrip", (0, -0.25, 0.75), (1.2, 0.25), 30)      # long highlight on the base and top edge
+softbox("Left", (-0.9, -0.5, 0.35), (0.5, 0.8), 28)
+softbox("Right", (0.9, -0.5, 0.35), (0.5, 0.8), 22)
 
-# Camera: perpendicular to the lid, centred on the screen, slightly above so the base reads
+# ---------- camera ----------
+
 cam_d = bpy.data.cameras.new("Cam")
-cam_d.lens = 85
+cam_d.lens = 135
 cam = bpy.data.objects.new("Cam", cam_d)
 scene.collection.objects.link(cam)
 scene.camera = cam
 bpy.context.view_layer.update()
-center = scr.matrix_world.translation.copy()
-normal = (scr.matrix_world.to_3x3() @ Vector((0, 0, 1))).normalized()  # plane normal after rotation
-if normal.y > 0:
-    normal = -normal
-dist = 1.6
-cam.location = center + Vector((0, -dist, 0.035))
-direction = center + Vector((0, 0, -0.018)) - cam.location
-cam.rotation_euler = direction.to_track_quat('-Z', 'Y').to_euler()
+centre = disp.matrix_world.translation.copy()
+cam.location = Vector((0, centre.y - 2.6, centre.z + 0.02))
+aim = centre + Vector((0, 0, -0.016))
+cam.rotation_euler = (aim - cam.location).to_track_quat('-Z', 'Y').to_euler()
+
+# Negative fill: a black card behind the camera, so the front edges reflect dark instead of the bright studio
+bpy.ops.mesh.primitive_plane_add(size=1)
+flag = bpy.context.object
+flag.scale = (2.4, 0.5, 1)
+flag.rotation_euler = (math.radians(90), 0, 0)
+flag.location = (0, cam.location.y - 0.4, 0.12)
+flag.data.materials.append(principled("Flag", "#000000", rough=1.0, spec=0.0))
+flag.visible_camera = False
+flag.visible_shadow = False
+
+# A dark card behind the laptop for the deck to reflect, also invisible to the camera
+bpy.ops.mesh.primitive_plane_add(size=1)
+back = bpy.context.object
+back.scale = (3.0, 0.6, 1)
+back.rotation_euler = (math.radians(90), 0, 0)
+back.location = (0, BASE_D + 1.2, 0.2)
+back.data.materials.append(principled("BackCard", "#3a3d44", rough=1.0, spec=0.0))
+back.visible_camera = False
+back.visible_shadow = False
+
+# ---------- render ----------
 
 scene.render.engine = 'CYCLES'
 prefs = bpy.context.preferences.addons["cycles"].preferences
@@ -210,8 +333,8 @@ except Exception:
 scene.cycles.samples = SAMPLES
 scene.cycles.use_denoising = True
 scene.render.film_transparent = True
-scene.render.resolution_x = 2200
-scene.render.resolution_y = 1500
+scene.render.resolution_x = RES_X
+scene.render.resolution_y = int(RES_X * 0.72)
 scene.render.image_settings.file_format = 'PNG'
 scene.render.image_settings.color_mode = 'RGBA'
 scene.view_settings.view_transform = 'Standard'
