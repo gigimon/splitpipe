@@ -52,6 +52,7 @@ make install  # build and copy to /Applications (system extensions only run from
 make run      # install and launch
 make test     # unit tests
 make package  # unsigned Release archive in build/release (what CI builds)
+make release  # Developer ID signed, notarized DMG in build/release
 make logs     # stream logs
 ```
 

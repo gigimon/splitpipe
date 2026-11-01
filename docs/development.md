@@ -9,6 +9,14 @@
   `X.Y.Z`, anything else `X.Y.Z-N-g<hash>` after the last tag (the short hash before the first one), `-dirty` with
   uncommitted changes; the build number is the commit count. `EXTENSION_VERSION` stays as in the Makefile. `make build`
   uses the same version and keeps a timestamp build number for local development. Settings → About shows both.
+- `make release` builds the DMG for the site (`build/release/SplitPipe-<version>.dmg` + `.sha256`): archive, Developer
+  ID export (Xcode creates the Developer ID profiles itself and switches the Network Extension entitlement to
+  `app-proxy-provider-systemextension`), notarization and stapling of the app and then of the DMG. Needs the
+  "Developer ID Application" certificate and `~/.appstoreconnect/splitpipe-notary.env` with `SPLITPIPE_NOTARY_KEY_ID`,
+  `SPLITPIPE_NOTARY_ISSUER`, `SPLITPIPE_NOTARY_KEY` (the team's App Store Connect API key, the same as KeeMac's).
+  `APP_VERSION=0.1.0 make release` overrides the version when HEAD has no tag.
+- The site is served by nginx from `/var/www/splitpipe.tech` on `root@it4it.ru`; downloads live in `download/`
+  (owner `www-data`): `scp build/release/SplitPipe-<version>.dmg* root@it4it.ru:/var/www/splitpipe.tech/download/`.
 
 ## Build and development lessons
 

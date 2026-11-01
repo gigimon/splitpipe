@@ -15,7 +15,7 @@ EXTENSION_VERSION := $(shell \
 # App version from git tags, shown in Settings → About (scripts/resolve_version.sh).
 APP_VERSION := $(shell bash -c 'source scripts/resolve_version.sh && echo $$APP_VERSION')
 
-.PHONY: project build test package install run logs clean
+.PHONY: project build test package release install run logs clean
 
 project:
 	xcodegen generate
@@ -33,6 +33,10 @@ test: project
 # Unsigned Release archive in build/release, version from git tags (scripts/resolve_version.sh).
 package:
 	EXTENSION_VERSION=$(EXTENSION_VERSION) scripts/package.sh
+
+# Developer ID signed, notarized and stapled DMG in build/release (see scripts/package.sh for the notary key).
+release:
+	EXTENSION_VERSION=$(EXTENSION_VERSION) scripts/package.sh --notarize
 
 install: build
 	-osascript -e 'quit app "SplitPipe"'
