@@ -66,3 +66,8 @@ helper in System Settings.
 - [System notes](docs/system-notes.md) — macOS and AmneziaVPN behavior SplitPipe relies on
 - [Known limitations](docs/known-limitations.md)
 - [Plans](docs/plans/PLANS.md)
+
+## License
+
+SplitPipe is free software under the [GNU General Public License v3.0](LICENSE). It uses
+[KeyboardShortcuts](https://github.com/sindresorhus/KeyboardShortcuts) (MIT).
