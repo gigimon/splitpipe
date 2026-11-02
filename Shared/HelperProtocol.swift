@@ -4,12 +4,12 @@ import Foundation
 /// интерфейса (пока VPN держит маршрут по умолчанию), — пока SplitPipe включён, восстанавливает их после сна,
 /// перезагрузки и переподключения VPN и снимает, когда они не нужны.
 enum HelperConfig {
-    static let machService = "dev.splitpipe.helper"
-    static let plistName = "dev.splitpipe.helper.plist"
+    static let machService = Config.helperBundleID
+    static let plistName = "\(Config.helperBundleID).plist"
     static let pfAnchor = "com.apple/splitpipe"
     /// Помощник принимает подключения только от SplitPipe, подписанного нашей командой, и наоборот.
-    static let appRequirement = #"identifier "dev.splitpipe.app" and anchor apple generic and certificate leaf[subject.OU] = "BL65NHTRYD""#
-    static let helperRequirement = #"identifier "dev.splitpipe.helper" and anchor apple generic and certificate leaf[subject.OU] = "BL65NHTRYD""#
+    static let appRequirement = #"identifier "\#(Config.appBundleID)" and anchor apple generic and certificate leaf[subject.OU] = "BL65NHTRYD""#
+    static let helperRequirement = #"identifier "\#(Config.helperBundleID)" and anchor apple generic and certificate leaf[subject.OU] = "BL65NHTRYD""#
 }
 
 struct HelperStatus: Codable, Equatable {

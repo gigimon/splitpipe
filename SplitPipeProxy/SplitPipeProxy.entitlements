@@ -4,13 +4,13 @@
 <dict>
 	<key>com.apple.developer.networking.networkextension</key>
 	<array>
-		<string>app-proxy-provider</string>
+		<string>$(SP_NE_APP_PROXY)</string>
 	</array>
 	<key>com.apple.security.app-sandbox</key>
 	<true/>
 	<key>com.apple.security.application-groups</key>
 	<array>
-		<string>$(TeamIdentifierPrefix)dev.splitpipe</string>
+		<string>$(TeamIdentifierPrefix)$(SP_GROUP)</string>
 	</array>
 	<key>com.apple.security.network.client</key>
 	<true/>

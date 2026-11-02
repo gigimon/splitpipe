@@ -47,7 +47,7 @@ Shared (app, extension, helper)
  ├─ Messages            ProviderConfig (rules with roles), ProviderRequest/Reply, FlowRecord, StatRow
  └─ HelperProtocol      helper XPC protocol, HelperStatus (not needed by the extension, but lives in Shared)
 
-dev.splitpipe.app.proxy.systemextension (NETransparentProxyProvider, root, sandbox)
+tech.splitpipe.proxy.systemextension (NETransparentProxyProvider, root, sandbox; dev.splitpipe.app.proxy in development)
  ├─ handleNewFlow / handleNewUDPFlow  rule → decision (interface / system / block), relay
  ├─ OwnerResolver       audit token → pid, path, responsible app
  ├─ TCPRelay / UDPRelay  NWConnection ↔ flow, traffic counters
@@ -55,7 +55,7 @@ dev.splitpipe.app.proxy.systemextension (NETransparentProxyProvider, root, sandb
  ├─ TrafficStats        statistics (5 min × 2 h, hour × 30 days), file in the extension container
  └─ messages: setConfig, status, probe, stun, abort, stats, resetStats
 
-dev.splitpipe.helper (LaunchDaemon from the app, root, no sandbox)
+tech.splitpipe.helper (LaunchDaemon from the app, root, no sandbox; dev.splitpipe.helper in development)
  ├─ Guardian            pf rule + scoped 0/1, 128.0/1 through the physical interface; route and pf log; anchorEffective
  ├─ ConnectionResetter  reset of connections bypassing the extension: pf block return in anchor com.apple/splitpipe-reset
  ├─ HelperEvent         what was done / why it failed, as codes (`HelperEvents` in the same JSON as HelperStatus); the

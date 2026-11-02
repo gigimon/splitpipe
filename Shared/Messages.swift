@@ -3,9 +3,23 @@ import Foundation
 enum Config {
     /// Интерфейс на русском независимо от языка системы: страны, размеры, время.
     static let locale = Locale(identifier: "ru_RU")
+    /// Debug — сборка для разработки («SplitPipe Dev», `dev.splitpipe.*`), Release — продукт (`tech.splitpipe.*`):
+    /// у них свои расширение, помощник и настройки, и они ставятся рядом. Те же id — в `project.yml`.
+    #if DEBUG
+    static let appBundleID = "dev.splitpipe.app"
     static let extensionBundleID = "dev.splitpipe.app.proxy"
-    /// Из Info.plist (`$(TeamIdentifierPrefix)dev.splitpipe`, как в entitlements), а не с зашитым team id.
-    static let appGroup = Bundle.main.object(forInfoDictionaryKey: "SPAppGroup") as? String ?? "BL65NHTRYD.dev.splitpipe"
+    static let helperBundleID = "dev.splitpipe.helper"
+    static let defaultAppGroup = "BL65NHTRYD.dev.splitpipe"
+    #else
+    static let appBundleID = "tech.splitpipe"
+    static let extensionBundleID = "tech.splitpipe.proxy"
+    static let helperBundleID = "tech.splitpipe.helper"
+    static let defaultAppGroup = "BL65NHTRYD.tech.splitpipe"
+    #endif
+    /// Свои процессы SplitPipe обоих вариантов: их соединения не перехватываются, ссылкам от них верим.
+    static let ownBundleIDPrefixes = ["dev.splitpipe", "tech.splitpipe"]
+    /// Из Info.plist (`$(TeamIdentifierPrefix)$(SP_GROUP)`, как в entitlements), а не с зашитым team id.
+    static let appGroup = Bundle.main.object(forInfoDictionaryKey: "SPAppGroup") as? String ?? defaultAppGroup
     static let logSubsystem = "dev.splitpipe"
     /// Внешний IP и страна выхода. По IP-адресу, без DNS: проверка «Напрямую» не зависит от DNS внутри VPN.
     static let traceURL = "https://1.1.1.1/cdn-cgi/trace"
@@ -118,7 +132,7 @@ struct ProviderConfig: Codable, Hashable {
 enum ManagedApps {
     static func contains(path: String?, signingID: String) -> Bool {
         guard let path, path.contains(".app/Contents/MacOS/"), !isSystem(path) else { return false }
-        if signingID.hasPrefix("dev.splitpipe") { return false }
+        if Config.ownBundleIDPrefixes.contains(where: { signingID.hasPrefix($0) }) { return false }
         return !VPNCatalog.isClient(path: path, signingID: signingID)
     }
 

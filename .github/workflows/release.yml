@@ -1,0 +1,192 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing git tag to publish, for example v0.1.1
+        required: true
+        type: string
+
+concurrency:
+  group: release-${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
+  cancel-in-progress: false
+
+env:
+  DEVELOPER_DIR: /Applications/Xcode_26.5.app/Contents/Developer
+  RELEASE_REF: ${{ github.event_name == 'workflow_dispatch' && format('refs/tags/{0}', inputs.tag) || github.ref }}
+
+jobs:
+  version:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    outputs:
+      tag: ${{ steps.version.outputs.tag }}
+      version: ${{ steps.version.outputs.version }}
+
+    steps:
+      - name: Check the tag is vX.Y.Z
+        id: version
+        shell: bash
+        run: |
+          set -euo pipefail
+          TAG="${RELEASE_REF#refs/tags/}"
+          if [[ ! "$TAG" =~ ^v([0-9]+\.[0-9]+\.[0-9]+)$ ]]; then
+            echo "::error::Release tags look like v1.2.3, got '$TAG'"
+            exit 1
+          fi
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "version=${BASH_REMATCH[1]}" >> "$GITHUB_OUTPUT"
+
+  unit-tests:
+    needs: version
+    runs-on: macos-26
+    timeout-minutes: 30
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ env.RELEASE_REF }}
+
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      - name: Run test suite
+        run: make test
+
+  publish-release:
+    needs: [version, unit-tests]
+    runs-on: macos-26
+    timeout-minutes: 60
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ env.RELEASE_REF }}
+          fetch-depth: 0
+
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      - name: Install signing certificate and provisioning profiles
+        env:
+          DEVELOPER_ID_P12: ${{ secrets.SPLITPIPE_DEVELOPER_ID_P12 }}
+          DEVELOPER_ID_P12_PASSWORD: ${{ secrets.SPLITPIPE_DEVELOPER_ID_P12_PASSWORD }}
+          PROFILE_APP: ${{ secrets.SPLITPIPE_PROFILE_APP }}
+          PROFILE_PROXY: ${{ secrets.SPLITPIPE_PROFILE_PROXY }}
+        run: |
+          set -euo pipefail
+          for variable in DEVELOPER_ID_P12 DEVELOPER_ID_P12_PASSWORD PROFILE_APP PROFILE_PROXY; do
+            if [[ -z "${!variable}" ]]; then
+              echo "::error::Secret SPLITPIPE_$variable is not set"
+              exit 1
+            fi
+          done
+          KEYCHAIN="$RUNNER_TEMP/signing.keychain-db"
+          KEYCHAIN_PASSWORD="$(openssl rand -base64 24)"
+          echo "$DEVELOPER_ID_P12" | base64 --decode > "$RUNNER_TEMP/developer-id.p12"
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
+          security import "$RUNNER_TEMP/developer-id.p12" -k "$KEYCHAIN" -P "$DEVELOPER_ID_P12_PASSWORD" -f pkcs12 -T /usr/bin/codesign
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN" >/dev/null
+          # shellcheck disable=SC2046
+          security list-keychains -d user -s "$KEYCHAIN" $(security list-keychains -d user | tr -d '"')
+          rm -f "$RUNNER_TEMP/developer-id.p12"
+          # Xcode looks the profiles up by name ("Splitpipe production", "Splitpipe proxy production"); files are named by UUID.
+          PROFILES_DIR="$HOME/Library/Developer/Xcode/UserData/Provisioning Profiles"
+          mkdir -p "$PROFILES_DIR"
+          for profile in "$PROFILE_APP" "$PROFILE_PROXY"; do
+            echo "$profile" | base64 --decode > "$RUNNER_TEMP/profile.provisionprofile"
+            UUID="$(security cms -D -i "$RUNNER_TEMP/profile.provisionprofile" | plutil -extract UUID raw -o - -)"
+            mv "$RUNNER_TEMP/profile.provisionprofile" "$PROFILES_DIR/$UUID.provisionprofile"
+          done
+          security find-identity -v -p codesigning "$KEYCHAIN"
+
+      - name: Install notary API key
+        env:
+          NOTARY_KEY: ${{ secrets.SPLITPIPE_NOTARY_KEY }}
+        run: |
+          set -euo pipefail
+          if [[ -z "$NOTARY_KEY" ]]; then
+            echo "::error::Secret SPLITPIPE_NOTARY_KEY is not set"
+            exit 1
+          fi
+          echo "$NOTARY_KEY" | base64 --decode > "$RUNNER_TEMP/notary-key.p8"
+          echo "SPLITPIPE_NOTARY_KEY=$RUNNER_TEMP/notary-key.p8" >> "$GITHUB_ENV"
+
+      - name: Build, notarize and pack the DMG
+        env:
+          APP_VERSION: ${{ needs.version.outputs.version }}
+          SPLITPIPE_NOTARY_KEY_ID: ${{ secrets.SPLITPIPE_NOTARY_KEY_ID }}
+          SPLITPIPE_NOTARY_ISSUER: ${{ secrets.SPLITPIPE_NOTARY_ISSUER }}
+        run: make release
+
+      - name: Check the DMG holds a notarized SplitPipe
+        env:
+          VERSION: ${{ needs.version.outputs.version }}
+        run: |
+          set -euo pipefail
+          DMG="build/release/SplitPipe-$VERSION.dmg"
+          xcrun stapler validate "$DMG"
+          MOUNT="$RUNNER_TEMP/dmg"
+          mkdir -p "$MOUNT"
+          hdiutil attach -nobrowse -readonly -mountpoint "$MOUNT" "$DMG"
+          APP="$MOUNT/SplitPipe.app"
+          BUNDLE_ID="$(/usr/libexec/PlistBuddy -c "Print :CFBundleIdentifier" "$APP/Contents/Info.plist")"
+          APP_VERSION="$(/usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" "$APP/Contents/Info.plist")"
+          if [[ "$BUNDLE_ID" != "tech.splitpipe" || "$APP_VERSION" != "$VERSION" ]]; then
+            echo "::error::Got $BUNDLE_ID $APP_VERSION, expected tech.splitpipe $VERSION"
+            exit 1
+          fi
+          spctl --assess --type execute -vv "$APP"
+          xcrun stapler validate "$APP"
+          hdiutil detach "$MOUNT"
+
+      - name: Create or update release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ needs.version.outputs.tag }}
+          VERSION: ${{ needs.version.outputs.version }}
+        run: |
+          set -euo pipefail
+          # The notes are the body of the annotated tag (after its "SplitPipe X.Y.Z" subject line);
+          # a tag without a body gets GitHub's generated notes.
+          git fetch --force origin "refs/tags/$TAG:refs/tags/$TAG"
+          NOTES="$RUNNER_TEMP/release-notes.md"
+          git tag -l --format='%(contents:body)' "$TAG" > "$NOTES"
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            if grep -q '[^[:space:]]' "$NOTES"; then
+              gh release edit "$TAG" --notes-file "$NOTES"
+            fi
+          elif grep -q '[^[:space:]]' "$NOTES"; then
+            gh release create "$TAG" --title "SplitPipe $VERSION" --notes-file "$NOTES"
+          else
+            gh release create "$TAG" --title "SplitPipe $VERSION" --generate-notes
+          fi
+
+      - name: Upload release assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release upload "${{ needs.version.outputs.tag }}" \
+            build/release/*.dmg \
+            build/release/*.sha256 \
+            --clobber
+
+      - name: Remove signing keychain and keys
+        if: always()
+        run: |
+          security delete-keychain "$RUNNER_TEMP/signing.keychain-db" 2>/dev/null || true
+          rm -f "$RUNNER_TEMP/notary-key.p8" "$HOME/Library/Developer/Xcode/UserData/Provisioning Profiles/"*.provisionprofile

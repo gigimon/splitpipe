@@ -3,12 +3,12 @@
 <plist version="1.0">
 <dict>
 	<key>Label</key>
-	<string>dev.splitpipe.helper</string>
+	<string>__HELPER_ID__</string>
 	<key>BundleProgram</key>
-	<string>Contents/MacOS/dev.splitpipe.helper</string>
+	<string>Contents/MacOS/__HELPER_ID__</string>
 	<key>MachServices</key>
 	<dict>
-		<key>dev.splitpipe.helper</key>
+		<key>__HELPER_ID__</key>
 		<true/>
 	</dict>
 	<key>RunAtLoad</key>
@@ -17,7 +17,7 @@
 	<true/>
 	<key>AssociatedBundleIdentifiers</key>
 	<array>
-		<string>dev.splitpipe.app</string>
+		<string>__APP_ID__</string>
 	</array>
 </dict>
 </plist>

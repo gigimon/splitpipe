@@ -47,12 +47,12 @@ Requirements: macOS 26+, Xcode 26, [XcodeGen](https://github.com/yonaskolb/Xcode
 extensions must be signed). Set your `DEVELOPMENT_TEAM` in `project.yml`.
 
 ```bash
-make build    # generate the Xcode project and build
+make build    # generate the Xcode project and build "SplitPipe Dev" (dev.splitpipe.*)
 make install  # build and copy to /Applications (system extensions only run from there)
 make run      # install and launch
 make test     # unit tests
 make package  # unsigned Release archive in build/release (what CI builds)
-make release  # Developer ID signed, notarized DMG in build/release
+make release  # SplitPipe (tech.splitpipe): Developer ID signed, notarized DMG; CI does it on vX.Y.Z tags
 make logs     # stream logs
 ```
 

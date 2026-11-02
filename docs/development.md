@@ -1,5 +1,20 @@
 # Development notes
 
+## Variants
+
+| | Development (`make build`, Debug) | Product (`make release`, Release) |
+| --- | --- | --- |
+| App | "SplitPipe Dev", `dev.splitpipe.app` | "SplitPipe", `tech.splitpipe` |
+| Extension | `dev.splitpipe.app.proxy` | `tech.splitpipe.proxy` |
+| Helper / widgets | `dev.splitpipe.helper` / `dev.splitpipe.app.widgets` | `tech.splitpipe.helper` / `tech.splitpipe.widgets` |
+| App Group | `BL65NHTRYD.dev.splitpipe` | `BL65NHTRYD.tech.splitpipe` |
+| Signing | automatic (Apple Development) | Developer ID, profiles "Splitpipe production" / "Splitpipe proxy production" |
+
+Each variant has its own extension, helper and settings, so both can be installed side by side. The ids live in
+`project.yml` (`SP_*` build settings per configuration) and in `Config` (`#if DEBUG`). The extension and the helper are
+named by their bundle ids, so the app target copies them in a build script instead of an embed phase (Xcode resolves
+embedded product names with the Debug configuration).
+
 ## CI and versions
 
 - `.github/workflows/ci.yml` runs on pushes to `main` and on pull requests (`macos-26`, Xcode 26.5): `make test` and
@@ -9,14 +24,18 @@
   `X.Y.Z`, anything else `X.Y.Z-N-g<hash>` after the last tag (the short hash before the first one), `-dirty` with
   uncommitted changes; the build number is the commit count. `EXTENSION_VERSION` stays as in the Makefile. `make build`
   uses the same version and keeps a timestamp build number for local development. Settings → About shows both.
-- `make release` builds the DMG for the site (`build/release/SplitPipe-<version>.dmg` + `.sha256`): archive, Developer
-  ID export (Xcode creates the Developer ID profiles itself and switches the Network Extension entitlement to
-  `app-proxy-provider-systemextension`), notarization and stapling of the app and then of the DMG. Needs the
-  "Developer ID Application" certificate and `~/.appstoreconnect/splitpipe-notary.env` with `SPLITPIPE_NOTARY_KEY_ID`,
-  `SPLITPIPE_NOTARY_ISSUER`, `SPLITPIPE_NOTARY_KEY` (the team's App Store Connect API key, the same as KeeMac's).
-  `APP_VERSION=0.1.0 make release` overrides the version when HEAD has no tag.
+- Releases: push an annotated `vX.Y.Z` tag (subject "SplitPipe X.Y.Z", body = release notes). `release.yml` runs the
+  tests, then `make release` with the secrets `SPLITPIPE_DEVELOPER_ID_P12` (+ `_PASSWORD`), `SPLITPIPE_PROFILE_APP`,
+  `SPLITPIPE_PROFILE_PROXY` and `SPLITPIPE_NOTARY_KEY` (+ `_KEY_ID`, `_ISSUER`), checks the DMG and publishes it with
+  its `.sha256` as a GitHub release.
+- `make release` builds the product DMG (`build/release/SplitPipe-<version>.dmg` + `.sha256`): archive, export for
+  Developer ID with the production profiles, notarization and stapling of the app and then of the DMG. Locally it needs
+  the "Developer ID Application" certificate, both profiles installed and `~/.appstoreconnect/splitpipe-notary.env`
+  with `SPLITPIPE_NOTARY_KEY_ID`, `SPLITPIPE_NOTARY_ISSUER`, `SPLITPIPE_NOTARY_KEY` (the team's App Store Connect API
+  key, the same as KeeMac's). `APP_VERSION=0.1.1 make release` overrides the version when HEAD has no tag.
 - The site is served by nginx from `/var/www/splitpipe.tech` on `root@it4it.ru`; downloads live in `download/`
-  (owner `www-data`): `scp build/release/SplitPipe-<version>.dmg* root@it4it.ru:/var/www/splitpipe.tech/download/`.
+  (owner `www-data`): download the DMG from the GitHub release and
+  `scp SplitPipe-<version>.dmg* root@it4it.ru:/var/www/splitpipe.tech/download/`, then update the links in `site/`.
 
 ## Build and development lessons
 

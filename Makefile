@@ -1,5 +1,7 @@
 BUILD_DIR := build
-APP := $(BUILD_DIR)/Build/Products/Debug/SplitPipe.app
+# `make build` / `install` make the development variant "SplitPipe Dev" (dev.splitpipe.*); the product is `make release`.
+APP_NAME := SplitPipe Dev
+APP := $(BUILD_DIR)/Build/Products/Debug/$(APP_NAME).app
 # The extension version changes only when its code changed: every new version makes the system replace the extension,
 # stopping the proxy and dropping all intercepted connections. With git — the time of the last commit touching the
 # extension code (mtime after checkout or copying is arbitrary, the version could "go down"); without git or with
@@ -39,12 +41,12 @@ release:
 	EXTENSION_VERSION=$(EXTENSION_VERSION) scripts/package.sh --notarize
 
 install: build
-	-osascript -e 'quit app "SplitPipe"'
-	rm -rf /Applications/SplitPipe.app
-	cp -R $(APP) /Applications/
+	-osascript -e 'quit app "$(APP_NAME)"'
+	rm -rf "/Applications/$(APP_NAME).app"
+	cp -R "$(APP)" /Applications/
 
 run: install
-	open /Applications/SplitPipe.app
+	open "/Applications/$(APP_NAME).app"
 
 logs:
 	log stream --level info --predicate 'subsystem == "dev.splitpipe"'

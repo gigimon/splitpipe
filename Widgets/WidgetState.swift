@@ -21,8 +21,12 @@ struct WidgetState: Codable, Equatable {
     /// Ссылки из своего виджета подписаны этим секретом: так приложение отличает их от ссылки с сайта.
     static let tokenKey = "urlToken"
 
-    /// `$(TeamIdentifierPrefix)dev.splitpipe` из Info.plist — как в entitlements.
+    /// `$(TeamIdentifierPrefix)$(SP_GROUP)` из Info.plist — как в entitlements (виджет собирается без Shared).
+    #if DEBUG
     static var appGroup: String { Bundle.main.object(forInfoDictionaryKey: "SPAppGroup") as? String ?? "BL65NHTRYD.dev.splitpipe" }
+    #else
+    static var appGroup: String { Bundle.main.object(forInfoDictionaryKey: "SPAppGroup") as? String ?? "BL65NHTRYD.tech.splitpipe" }
+    #endif
     static var defaults: UserDefaults? { UserDefaults(suiteName: appGroup) }
 
     static func load() -> WidgetState? {

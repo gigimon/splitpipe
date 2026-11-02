@@ -4,12 +4,12 @@
 #   (no options)  Unsigned build packed as build/release/SplitPipe-<version>-macOS.zip with its .sha256. CI uses it
 #                 to check that the release configuration builds; a system extension needs a real signature to run,
 #                 so this archive does not install.
-#   --notarize    Developer ID build packed as build/release/SplitPipe-<version>.dmg with its .sha256: archive, export
-#                 for Developer ID (Xcode creates the Developer ID profiles and switches the Network Extension
-#                 entitlement to `app-proxy-provider-systemextension`), notarize and staple the app, then the same for
-#                 the DMG. Needs a "Developer ID Application" certificate, Xcode signed in to the team, and an App Store
-#                 Connect API key: SPLITPIPE_NOTARY_KEY_ID, SPLITPIPE_NOTARY_ISSUER, SPLITPIPE_NOTARY_KEY (path to the
-#                 .p8) from the environment or ~/.appstoreconnect/splitpipe-notary.env.
+#   --notarize    The product (tech.splitpipe) packed as build/release/SplitPipe-<version>.dmg with its .sha256:
+#                 archive and export for Developer ID with the "Splitpipe production" and "Splitpipe proxy production"
+#                 profiles, notarize and staple the app, then the same for the DMG. Needs the "Developer ID
+#                 Application" certificate in the keychain, both profiles installed, and an App Store Connect API key:
+#                 SPLITPIPE_NOTARY_KEY_ID, SPLITPIPE_NOTARY_ISSUER, SPLITPIPE_NOTARY_KEY (path to the .p8) from the
+#                 environment or ~/.appstoreconnect/splitpipe-notary.env. release.yml runs it on vX.Y.Z tags.
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -17,6 +17,7 @@ BUILD_DIR="$ROOT_DIR/build"
 DERIVED_DATA_PATH="$BUILD_DIR/package"
 RELEASE_DIR="$BUILD_DIR/release"
 TEAM_ID="BL65NHTRYD"
+BUNDLE_ID="tech.splitpipe"
 NOTARIZE="false"
 # shellcheck source=resolve_version.sh
 source "$ROOT_DIR/scripts/resolve_version.sh"
@@ -53,7 +54,7 @@ if [[ "$NOTARIZE" != "true" ]]; then
   rm -rf "$DERIVED_DATA_PATH"
   xcodebuild -project SplitPipe.xcodeproj -scheme SplitPipe -configuration Release \
     -destination "platform=macOS" -derivedDataPath "$DERIVED_DATA_PATH" "${VERSION_SETTINGS[@]}" \
-    CODE_SIGNING_ALLOWED=NO CODE_SIGN_IDENTITY="" DEVELOPMENT_TEAM="" \
+    CODE_SIGNING_ALLOWED=NO CODE_SIGN_IDENTITY="" DEVELOPMENT_TEAM="" PROVISIONING_PROFILE_SPECIFIER="" \
     build
   if [[ ! -d "$APP_PATH" ]]; then
     echo "error: expected app bundle was not produced: $APP_PATH" >&2
@@ -92,7 +93,7 @@ rm -rf "$WORK_DIR"
 mkdir -p "$WORK_DIR"
 
 xcodebuild archive -project SplitPipe.xcodeproj -scheme SplitPipe -configuration Release \
-  -destination "generic/platform=macOS" -archivePath "$XCARCHIVE" -allowProvisioningUpdates "${VERSION_SETTINGS[@]}"
+  -destination "generic/platform=macOS" -archivePath "$XCARCHIVE" "${VERSION_SETTINGS[@]}"
 
 cat > "$WORK_DIR/ExportOptions.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
@@ -102,14 +103,29 @@ cat > "$WORK_DIR/ExportOptions.plist" <<PLIST
   <key>method</key>
   <string>developer-id</string>
   <key>signingStyle</key>
-  <string>automatic</string>
+  <string>manual</string>
   <key>teamID</key>
   <string>$TEAM_ID</string>
+  <key>signingCertificate</key>
+  <string>Developer ID Application</string>
+  <key>provisioningProfiles</key>
+  <dict>
+    <key>$BUNDLE_ID</key>
+    <string>Splitpipe production</string>
+    <key>$BUNDLE_ID.proxy</key>
+    <string>Splitpipe proxy production</string>
+  </dict>
 </dict>
 </plist>
 PLIST
 xcodebuild -exportArchive -archivePath "$XCARCHIVE" -exportPath "$EXPORT_DIR" \
-  -exportOptionsPlist "$WORK_DIR/ExportOptions.plist" -allowProvisioningUpdates
+  -exportOptionsPlist "$WORK_DIR/ExportOptions.plist"
+
+APP_BUNDLE_ID="$(/usr/libexec/PlistBuddy -c "Print :CFBundleIdentifier" "$APP_PATH/Contents/Info.plist")"
+if [[ "$APP_BUNDLE_ID" != "$BUNDLE_ID" ]]; then
+  echo "error: bundle id is $APP_BUNDLE_ID, expected $BUNDLE_ID" >&2
+  exit 1
+fi
 
 SIGNATURE="$(codesign -dv --verbose=2 "$APP_PATH" 2>&1 || true)"
 if [[ "$SIGNATURE" != *"Authority=Developer ID Application"* ]]; then

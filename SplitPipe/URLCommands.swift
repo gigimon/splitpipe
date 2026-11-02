@@ -6,7 +6,7 @@ import Foundation
 /// без подтверждения выполняются только вызовы от «Команд», самого SplitPipe (виджет) и программ, которым
 /// пользователь разрешил это раз и навсегда.
 extension AppModel {
-    static let trustedURLSenderPrefixes = ["com.apple.shortcuts", "dev.splitpipe"]
+    static let trustedURLSenderPrefixes = ["com.apple.shortcuts"] + Config.ownBundleIDPrefixes
 
     func handleURL(_ url: URL, sender: String?) {
         guard url.scheme == "splitpipe" else { return }
