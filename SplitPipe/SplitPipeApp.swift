@@ -22,6 +22,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
+    /// С единственной сценой `Window` SwiftUI завершает приложение, когда её окно закрыли. SplitPipe живёт и без окна:
+    /// в строке меню и в Dock.
+    func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { false }
+
+    /// Щелчок по значку в Dock без открытых окон — снова главное окно.
+    func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
+        guard !flag, let open = AppModel.shared?.openMainWindow else { return true }
+        open()
+        return false
+    }
+
     func applicationWillFinishLaunching(_ notification: Notification) {
         let event = NSAppleEventManager.shared().currentAppleEvent
         Self.launchedAsLoginItem = event?.eventID == kAEOpenApplication

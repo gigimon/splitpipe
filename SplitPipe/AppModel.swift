@@ -734,7 +734,8 @@ final class AppModel: ObservableObject {
         var reply = await proxy.send(.statusParts(StatusParts(rules: false, network: true, flows: flows)))
         // Расширение старой версии (до замены) `statusParts` не знает.
         if case .error? = reply { reply = await proxy.send(.status) }
-        guard case .status(var s)? = reply else { return }
+        // Опрос прежнего раздела отменён: его ответ (например, без соединений) не должен затереть ответ нового.
+        guard case .status(var s)? = reply, !Task.isCancelled else { return }
         // Расширение не прочитало конфигурацию при запуске — досылаем свою, один раз на появление проблемы.
         if s.configProblem != nil, providerStatus?.configProblem == nil { repushRules() }
         // Правила без них в ответе — прежние: пустые значили бы «в расширении правил нет».

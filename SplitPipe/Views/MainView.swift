@@ -86,23 +86,26 @@ struct MainView: View {
         .onChange(of: model.requestedSection) { _, s in
             if let s { section = s; model.requestedSection = nil }
         }
-        // Соединения нужного экрана — сразу, а не через 2 с опроса.
-        .onChange(of: section) { Task { await model.pollStatus(flows: flowScope) } }
         .task {
             // `open SplitPipe.app --args -SPOpenSettings YES` — сразу открыть настройки (для проверки вёрстки).
             if UserDefaults.standard.bool(forKey: "SPOpenSettings") { openSettings() }
             #if DEBUG
             if UserDefaults.standard.bool(forKey: "SPMenuPreview") { openWindow(id: "menu-preview") }
             #endif
+        }
+        // Опрос перезапускается со сменой раздела: соединения нужного экрана — сразу. Долгий цикл в одной `.task`
+        // видел раздел, с которым запустился, и затирал ленту «Соединений» ответом без соединений.
+        .task(id: section) {
+            let scope = section
             while !Task.isCancelled {
-                await model.pollStatus(flows: flowScope)
-                try? await Task.sleep(for: .seconds(section == .connections ? 1 : 2))
+                await model.pollStatus(flows: flowScope(scope))
+                try? await Task.sleep(for: .seconds(scope == .connections ? 1 : 2))
             }
         }
     }
 
     /// Соединения, которые нужны открытому разделу: все — «Соединениям», последние выбранного приложения — «Приложениям».
-    private var flowScope: StatusParts.Flows {
+    private func flowScope(_ section: SidebarSection) -> StatusParts.Flows {
         switch section {
         case .connections: .all
         case .apps: model.flowScope

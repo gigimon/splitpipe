@@ -37,8 +37,11 @@ final class HelperController: ObservableObject {
     func install() {
         do {
             try service.register()
+            lastError = nil
         } catch {
-            lastError = error.localizedDescription
+            // Пока помощник ждёт разрешения, `register()` отвечает «Operation not permitted» — это не ошибка.
+            let status = service.status
+            lastError = status == .requiresApproval || status == .enabled ? nil : error.localizedDescription
         }
         registration = service.status
         if registration == .requiresApproval { SMAppService.openSystemSettingsLoginItems() }
@@ -122,6 +125,8 @@ final class HelperController: ObservableObject {
     private func apply(_ reply: (HelperStatus, HelperEvents)?) {
         status = reply?.0
         events = reply?.1 ?? HelperEvents()
+        // Помощник ответил — прошлая ошибка установки или связи больше не верна.
+        if reply != nil { lastError = nil }
     }
 
     private func call(_ body: @escaping (HelperProtocol, @escaping (Data?) -> Void) -> Void) async -> (HelperStatus, HelperEvents)? {
