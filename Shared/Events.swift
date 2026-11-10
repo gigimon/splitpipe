@@ -22,6 +22,12 @@ enum RouteDropReason: Codable, Hashable {
     case vpnDroppedDefault(interface: String)
     /// Событие ядра о Wi-Fi: смена точки, линк.
     case wifi(interface: String, event: String)
+    /// VPN снял host-маршрут к своему серверу через физический интерфейс (переподключение, пропажа шлюза).
+    case vpnHostRouteGone(interface: String)
+    /// VPN держит маршрут по умолчанию, но из туннеля ничего не приходит (сторож помощника).
+    case tunnelStalled(interface: String)
+    /// Система засыпает.
+    case sleep
 }
 
 /// Что случилось — кодом, без текста: у root-процессов своя локаль (а у расширения нет локализаций), текст на языке

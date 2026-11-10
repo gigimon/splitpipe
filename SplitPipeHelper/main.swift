@@ -26,12 +26,56 @@ final class Guardian: @unchecked Sendable {
     /// и перехватывает адрес: 2026-10-19 так пропадал сервер Amnezia — handshake не уходил на en1, пока маршруты
     /// не сняли, и VPN висел в «reconnecting». Удаление маршрута удаляет и его клоны. Значение — причина для журнала.
     private var routesStale: String?
-    /// Линк физического интерфейса моргнул или utun VPN пропал: свои маршруты сняты сразу, и до возврата host-маршрута
-    /// VPN к серверу (или `vpnRouteWait`) заново не ставятся. Иначе первый handshake перезапущенного `amneziawg-go`
-    /// уходит через наш маршрут с устаревшим адресом и теряется, а пересоздание по host-маршруту опаздывает на ~0,7 с:
-    /// 2026-10-22 12:36 Amnezia после этого 86 минут висела в «reconnecting» (PLANS, «Разобрано»).
-    private var waitingForVPNRoute: Date?
+    /// Свои маршруты сняты и заново не ставятся, пока не станет видно, что туннель VPN работает: сначала VPN должен
+    /// вернуть host-маршрут к серверу (`awaitHost`), потом из туннеля должны прийти пакеты. Иначе handshake
+    /// перезапущенного `amneziawg-go` попадает на наши маршруты: 2026-10-22 12:36 Amnezia после этого 86 минут висела
+    /// в «reconnecting». «Host-маршрут вернулся» — ещё не «VPN переподключился»: Amnezia ставит его до handshake и при
+    /// каждой смене шлюза (2026-11-09 21:44:13 маршруты вернулись через 0,38 с, сеть только поднималась). Время —
+    /// uptime: сон в срок не входит.
+    private struct Hold {
+        var since: TimeInterval
+        /// Раньше этого маршруты не возвращаются, даже если трафик идёт: линк и DHCP должны устояться.
+        var notBefore: TimeInterval
+        /// Дольше не ждём: VPN на Network Extension host-маршрут не ставит, а туннель без трафика молчит.
+        var limit: TimeInterval
+        var awaitHost: Bool
+        /// Туннель (`utun4#24`) и число пришедших из него пакетов на момент снятия.
+        var tunnel: String?
+        var rx: UInt32 = 0
+        var tx: UInt32 = 0
+        /// Линк моргнул, а VPN не перезапускался: молчащий туннель (в него никто и не слал) — не повод ждать.
+        var idleOK: Bool
+        var reason: String
+    }
+    private var hold: Hold?
+    /// Последний utun, державший маршрут по умолчанию: на сверке между «VPN снял маршруты» и «вернул» его в снимке
+    /// сети нет, а счётчики для удержания нужны его.
+    private var lastVPNTunnel: String?
+    private var holdWork: DispatchWorkItem?
     private let vpnRouteWait: TimeInterval = 15
+    private let linkWait: TimeInterval = 5
+    /// Host-маршруты VPN к своим серверам через физический интерфейс — по событиям routing socket. Триггер ждёт
+    /// host-маршрут, только пока их нет: события ядра и SCDynamicStore приходят не в порядке routing socket, и
+    /// ожидание, взведённое после возврата маршрута, никто не снимал (2026-11-09 21:43:39 — 15 с без «Напрямую»).
+    private var vpnHostRoutes: Set<UInt32> = []
+    /// Сторож туннеля: VPN держит маршрут по умолчанию, пакеты в туннель уходят, а из него не приходят.
+    /// 2026-11-09 туннель был мёртв 76 минут, и ни один триггер не сработал — все они ждут переподключения VPN.
+    private struct TunnelWatch {
+        var tunnel: String
+        var rx: UInt32
+        var txAtRx: UInt32
+        var rxChangedAt: TimeInterval
+        var reported = false
+    }
+    private var tunnelWatch: TunnelWatch?
+    private var watchTimer: DispatchSourceTimer?
+    private let stallAfter: TimeInterval = 30
+    private let stallPackets: UInt32 = 20
+    private let power = PowerMonitor()
+    /// Первая из отложенных заявок на сверку: дольше `maxTickDelay` от неё сверка не откладывается.
+    private var tickRequestedAt: DispatchTime?
+    private let maxTickDelay: TimeInterval = 2
+    private var uptime: TimeInterval { ProcessInfo.processInfo.systemUptime }
     /// Флаги линка по интерфейсам из `RTM_IFINFO` и `Active` из `State:/Network/Interface/<if>/Link` — реагируем на смену.
     private var linkUp: [String: Bool] = [:]
     private var linkActive: [String: Bool] = [:]
@@ -58,6 +102,9 @@ final class Guardian: @unchecked Sendable {
     private static let extensionContainer = "/private/var/root/Library/Containers/\(Config.extensionBundleID)"
     private static let heartbeatPath = extensionContainer + "/Data/Library/Application Support/heartbeat"
     private let heartbeatMaxAge: TimeInterval = 60
+    /// Когда (uptime) heartbeat последний раз был свежим. После сна он устарел по часам, а таймер расширения
+    /// (uptime) ещё не сработал: это не «прокси не работает» — иначе обход снимался после каждого сна дольше минуты.
+    private var heartbeatFreshAt: TimeInterval?
     /// Как прокси выглядел на прошлой сверке — для журнала на смене.
     private var proxyState: String?
     private var proxyRecheck: DispatchWorkItem?
@@ -85,19 +132,25 @@ final class Guardian: @unchecked Sendable {
             // маршруты сейчас же, иначе handshake уйдёт через них — с устаревшим адресом после роуминга.
             if let change, change.type == RTM_DELETE, change.isDefault, !change.route.scoped,
                NetworkState.isTunnel(change.route.interface) {
+                self.tunnelWatch = nil
                 self.dropRoutes("VPN \(change.route.interface) снял маршрут по умолчанию",
                                 .vpnDroppedDefault(interface: change.route.interface), awaitVPN: true)
             }
-            // VPN-клиент вернул маршрут к своему серверу через физический интерфейс (переподключение): пока его не было,
-            // ядро могло клонировать от нашего `128.0/1` host-маршрут к серверу — он перехватит адрес у маршрута VPN.
+            // Host-маршрут VPN к своему серверу через физический интерфейс. Пока его нет, ядро клонирует от нашего
+            // `0/1` или `128.0/1` host-маршрут к серверу — он перехватит адрес у маршрута VPN: свои снимаем и когда
+            // VPN снял его (переподключение, пропажа шлюза), и когда вернул (клон мог появиться, пока его не было).
             // Так бывает и без пропажи `default`: при роуминге между точками mesh-сети линк моргает, DHCP заново
             // ставит тот же адрес, и наши маршруты держат старый (`Can't assign requested address`).
-            if let change, change.type == RTM_ADD, change.route.prefix == 32, !change.route.scoped,
-               !NetworkState.isTunnel(change.route.interface) {
-                self.routesStale = "VPN вернул маршрут к серверу"
-                self.waitingForVPNRoute = nil
-                // Маршруты VPN по умолчанию идут следом за host-маршрутом в те же миллисекунды.
-                self.scheduleTick(after: 0.2)
+            if let change, change.route.prefix == 32, !change.route.scoped, !NetworkState.isTunnel(change.route.interface) {
+                if change.type == RTM_ADD {
+                    self.vpnHostRoutes.insert(change.route.destination)
+                    self.tunnelWatch = nil
+                    self.dropRoutes("VPN вернул маршрут к серверу", nil, awaitVPN: true)
+                } else if change.type == RTM_DELETE {
+                    self.vpnHostRoutes.remove(change.route.destination)
+                    self.dropRoutes("VPN снял маршрут к серверу", .vpnHostRouteGone(interface: change.route.interface),
+                                    awaitVPN: true)
+                }
             }
             if change?.isDefault ?? true { self.scheduleTick() }
         }
@@ -124,6 +177,22 @@ final class Guardian: @unchecked Sendable {
         t.setEventHandler { [weak self] in self?.tick() }
         t.resume()
         timer = t
+        let w = DispatchSource.makeTimerSource(queue: queue)
+        w.schedule(deadline: .now() + 5, repeating: 5, leeway: .seconds(1))
+        w.setEventHandler { [weak self] in self?.watchTunnel() }
+        w.resume()
+        watchTimer = w
+        // Перед сном «линк пропал» приходит не всегда (2026-11-09 21:56:39 маршруты пережили сон): снимаем сами,
+        // а после пробуждения возвращаем, только когда туннель снова пропускает трафик.
+        power.onSleep = { [weak self] in self?.dropRoutes("система засыпает", .sleep, awaitVPN: false) }
+        power.onWake = { [weak self] in
+            guard let self else { return }
+            log.notice("пробуждение")
+            self.tunnelWatch = nil
+            self.startHold("пробуждение", awaitVPN: false, idleOK: false, minimum: 2, limit: self.vpnRouteWait)
+            self.scheduleHoldCheck()
+        }
+        if !power.start(queue: queue) { log.error("power notifications unavailable") }
     }
 
     func setEnabled(_ on: Bool, reply: @escaping (Data?) -> Void) {
@@ -157,12 +226,19 @@ final class Guardian: @unchecked Sendable {
                                                         pfNoteEvent: pfNote))
     }
 
-    /// Несколько событий маршрутов подряд (VPN ставит `0/1`, `128.0/1` и host-маршрут) — одна сверка.
+    /// Несколько событий маршрутов подряд (VPN ставит `0/1`, `128.0/1` и host-маршрут) — одна сверка. Каждое событие
+    /// сдвигает её, но не дальше `maxTickDelay` от первого: при роуминге события идут потоком.
     private func scheduleTick(after delay: TimeInterval = 0.5) {
+        let now = DispatchTime.now()
+        let first = tickRequestedAt ?? now
+        tickRequestedAt = first
         tickWork?.cancel()
-        let work = DispatchWorkItem { [weak self] in self?.tick() }
+        let work = DispatchWorkItem { [weak self] in
+            self?.tickRequestedAt = nil
+            self?.tick()
+        }
         tickWork = work
-        queue.asyncAfter(deadline: .now() + delay, execute: work)
+        queue.asyncAfter(deadline: min(now + delay, first + maxTickDelay), execute: work)
     }
 
     // MARK: - Линк и utun
@@ -238,18 +314,126 @@ final class Guardian: @unchecked Sendable {
         iface == network.physical || network.splitRoutes.contains(where: { $0.ours && $0.interface == iface })
     }
 
-    /// Снимает свои маршруты сейчас. `awaitVPN` — VPN-клиент перезапускается: вернуть после его host-маршрута
-    /// к серверу (`waitingForVPNRoute`); иначе (линк моргнул, VPN на месте) — на ближайшей сверке, уже свежими.
-    private func dropRoutes(_ reason: String, _ code: RouteDropReason, awaitVPN: Bool) {
-        if awaitVPN { waitingForVPNRoute = Date() }
+    /// Снимает свои маршруты сейчас и не даёт вернуть их, пока туннель VPN не заработает (`Hold`). `awaitVPN` —
+    /// VPN-клиент перезапускается: ждать его host-маршрут и трафик до `vpnRouteWait`; иначе (линк моргнул, VPN на
+    /// месте) — до `linkWait`. Маршруты берутся из последнего снимка сети: свежий снимок с опознанием VPN и два
+    /// запуска `route` занимали до 283 мс, а VPN-клиент за это время успевал переподключиться (2026-11-09 21:43:23).
+    /// `code` — причина для истории; nil — в историю идёт обычное «сняты маршруты».
+    private func dropRoutes(_ reason: String, _ code: RouteDropReason?, awaitVPN: Bool) {
+        startHold(reason, awaitVPN: awaitVPN, idleOK: !awaitVPN, minimum: awaitVPN ? 0.3 : 1,
+                  limit: awaitVPN ? vpnRouteWait : linkWait)
+        defer { scheduleHoldCheck() }
         guard enabled else { return }
-        network = NetworkState.current()
-        guard network.splitRoutes.contains(where: \.ours) else { return }
-        log.notice("\(reason, privacy: .public) — снимаю маршруты, верну \(awaitVPN ? "после host-маршрута VPN" : "свежими", privacy: .public)")
-        removeRoutes(except: nil, journal: false)
-        events.add(.routesDropped(code))
+        guard network.splitRoutes.contains(where: \.ours) else {
+            log.notice("\(reason, privacy: .public) — своих маршрутов нет")
+            return
+        }
+        let started = uptime
+        removeRoutes(except: nil, journal: code == nil)
+        log.notice("\(reason, privacy: .public) — маршруты сняты за \(Int((self.uptime - started) * 1000)) мс, верну, когда туннель заработает")
+        if let code { events.add(.routesDropped(code)) }
         publish()
-        if !awaitVPN { scheduleTick(after: 1) }
+    }
+
+    // MARK: - Удержание маршрутов
+
+    /// Вызывать на `queue`. Новый триггер начинает срок заново; ожидание host-маршрута — по состоянию, а не по
+    /// порядку событий.
+    private func startHold(_ reason: String, awaitVPN: Bool, idleOK: Bool, minimum: TimeInterval, limit: TimeInterval) {
+        let now = uptime
+        let tunnel = network.defaultInterface.flatMap { NetworkState.isTunnel($0) ? $0 : nil } ?? lastVPNTunnel
+        let counters = tunnel.flatMap(InterfaceCounters.read)
+        let awaitHost = (awaitVPN || hold?.awaitHost == true) && vpnHostRoutes.isEmpty
+        hold = Hold(since: now, notBefore: max(now + minimum, hold?.notBefore ?? 0), limit: max(limit, hold?.limit ?? 0),
+                    awaitHost: awaitHost, tunnel: tunnel.map(Self.binding), rx: counters?.inPackets ?? 0,
+                    tx: counters?.outPackets ?? 0, idleOK: idleOK && (hold?.idleOK ?? true), reason: reason)
+    }
+
+    private static func binding(_ interface: String) -> String { "\(interface)#\(if_nametoindex(interface))" }
+
+    /// Пришли ли из туннеля пакеты с начала удержания (у пересозданного utun счётчики с нуля) — или, при `idleOK`,
+    /// в прежний туннель никто и не слал.
+    private static func tunnelAnswers(_ tunnel: String?, since hold: Hold) -> Bool {
+        guard let tunnel, NetworkState.isTunnel(tunnel), let now = InterfaceCounters.read(tunnel) else { return false }
+        let same = binding(tunnel) == hold.tunnel
+        if now.inPackets != (same ? hold.rx : 0) { return true }
+        return hold.idleOK && same && now.outPackets == hold.tx
+    }
+
+    /// Ждать ли ещё с возвратом маршрутов; false — можно ставить, удержание снято. Вызывать на `queue`, `network` — свежий.
+    private func holdBlocks() -> Bool {
+        guard let h = hold else { return false }
+        let now = uptime
+        if now - h.since >= h.limit {
+            log.notice("\(h.reason, privacy: .public): туннель не ответил за \(Int(h.limit)) с\(h.awaitHost ? ", host-маршрута VPN нет" : "", privacy: .public) — ставлю маршруты без него")
+            hold = nil
+            return false
+        }
+        guard now >= h.notBefore, !h.awaitHost, Self.tunnelAnswers(network.defaultInterface, since: h) else { return true }
+        log.notice("\(h.reason, privacy: .public): туннель в порядке через \(String(format: "%.1f", now - h.since)) с — возвращаю маршруты")
+        hold = nil
+        return false
+    }
+
+    /// Лёгкая проверка раз в 0,5 с: счётчики туннеля и срок. Полная сверка (`tick`) — только когда пора.
+    private func scheduleHoldCheck() {
+        guard holdWork == nil, hold != nil else { return }
+        let work = DispatchWorkItem { [weak self] in
+            guard let self else { return }
+            self.holdWork = nil
+            guard let h = self.hold else { return }
+            let now = self.uptime
+            let ready = now - h.since >= h.limit || (now >= h.notBefore && !h.awaitHost
+                && Self.tunnelAnswers(NetworkState.read(detectVPNs: false)?.defaultInterface, since: h))
+            if ready { self.tick() } else { self.scheduleHoldCheck() }
+        }
+        holdWork = work
+        queue.asyncAfter(deadline: .now() + 0.5, execute: work)
+    }
+
+    // MARK: - Сторож туннеля
+
+    /// Раз в 5 с на `queue`. Пакеты в туннель уходят (приложения переподключаются), а обратно — ни одного за
+    /// `stallAfter` секунд работы системы: туннель мёртв, хотя VPN держит маршрут по умолчанию.
+    private func watchTunnel() {
+        guard enabled, network.vpnHoldsDefault, let tunnel = network.defaultInterface,
+              let c = InterfaceCounters.read(tunnel) else {
+            tunnelWatch = nil
+            return
+        }
+        let binding = Self.binding(tunnel)
+        let now = uptime
+        guard let w = tunnelWatch, w.tunnel == binding, w.rx == c.inPackets else {
+            if let w = tunnelWatch, w.tunnel == binding, w.reported {
+                log.notice("VPN \(tunnel, privacy: .public) снова пропускает трафик")
+            }
+            tunnelWatch = TunnelWatch(tunnel: binding, rx: c.inPackets, txAtRx: c.outPackets, rxChangedAt: now)
+            return
+        }
+        let sent = c.outPackets &- w.txAtRx
+        guard !w.reported, now - w.rxChangedAt >= stallAfter, sent >= stallPackets else { return }
+        tunnelWatch?.reported = true
+        log.error("VPN \(tunnel, privacy: .public) не пропускает трафик: за \(Int(now - w.rxChangedAt)) с ушло \(sent) пакетов, не пришло ни одного")
+        events.add(.routesDropped(.tunnelStalled(interface: tunnel)))
+        logStall(physical: network.physical)
+        // Свои маршруты снимаем: если туннель держат они, он оживёт, и они вернутся по трафику; нет — через `vpnRouteWait`.
+        dropRoutes("VPN \(tunnel) не пропускает трафик", nil, awaitVPN: true)
+    }
+
+    /// Что ядро думает о маршруте к серверу VPN в момент, когда туннель мёртв, — в журнал, вне очереди помощника.
+    private func logStall(physical: String?) {
+        let servers = vpnHostRoutes.map { a in [24, 16, 8, 0].map { String(a >> UInt32($0) & 0xff) }.joined(separator: ".") }
+        DispatchQueue.global(qos: .utility).async {
+            var out: [String] = []
+            for server in servers.sorted() {
+                out.append("route get \(server):\n" + Self.run("/sbin/route", ["-n", "get", server]))
+                if let physical {
+                    out.append("route get -ifscope \(physical) \(server):\n" + Self.run("/sbin/route", ["-n", "get", "-ifscope", physical, server]))
+                }
+            }
+            out.append(Self.run("/usr/sbin/netstat", ["-rn", "-f", "inet"]).split(separator: "\n").prefix(60).joined(separator: "\n"))
+            log.notice("stall: servers=\(servers.sorted(), privacy: .public)\n\(out.joined(separator: "\n"), privacy: .public)")
+        }
     }
 
     /// Вызывать на `queue`.
@@ -267,6 +451,7 @@ final class Guardian: @unchecked Sendable {
             log.notice("physical: \(self.network.physical ?? "-", privacy: .public) → \(state.physical ?? "-", privacy: .public) (\(state.physicalVia ?? "?", privacy: .public))")
         }
         network = state
+        if state.vpnHoldsDefault { lastVPNTunnel = state.defaultInterface }
         logPFOnVPNChange()
         guard enabled else {
             disarm()
@@ -325,8 +510,18 @@ final class Guardian: @unchecked Sendable {
         let running: Bool
         if stat(Self.heartbeatPath, &st) == 0 {
             let age = Date().timeIntervalSince1970 - Double(st.st_mtimespec.tv_sec)
-            running = age < heartbeatMaxAge
-            state = running ? "heartbeat" : "heartbeat stale"
+            let now = uptime
+            if age < heartbeatMaxAge {
+                heartbeatFreshAt = now
+                running = true
+                state = "heartbeat"
+            } else if let at = heartbeatFreshAt, now - at < heartbeatMaxAge {
+                running = true
+                state = "heartbeat (stale by clock, fresh by uptime: sleep)"
+            } else {
+                running = false
+                state = "heartbeat stale"
+            }
         } else if errno == ENOENT, stat(Self.extensionContainer, &st) == 0 {
             running = false
             state = "no heartbeat"
@@ -362,17 +557,19 @@ final class Guardian: @unchecked Sendable {
         defer { vpnHeldDefault = holds }
         guard let was = vpnHeldDefault, was != holds else { return }
         let reason = holds ? "VPN вернул маршрут по умолчанию" : "VPN потерял маршрут по умолчанию"
-        logPF(reason)
+        // Пять запусков `pfctl` — вне очереди помощника: в эти мгновения VPN переподключается, и ранние триггеры
+        // не должны ждать журнала.
+        DispatchQueue.global(qos: .utility).async { Self.logPF(reason) }
         if !holds {
             queue.asyncAfter(deadline: .now() + 3) { [weak self] in
                 guard let self else { return }
-                self.logPF("\(reason), через 3 с")
+                DispatchQueue.global(qos: .utility).async { Self.logPF("\(reason), через 3 с") }
                 if self.enabled { self.checkAnchorEffective(force: true); self.publish() }
             }
         }
     }
 
-    private func logPF(_ reason: String) {
+    private static func logPF(_ reason: String) {
         let info = Self.run("/sbin/pfctl", ["-s", "info"]).split(separator: "\n").prefix(1).joined()
         let main = Self.run("/sbin/pfctl", ["-sr"])
         let anchors = Self.run("/sbin/pfctl", ["-sA"])
@@ -451,15 +648,10 @@ final class Guardian: @unchecked Sendable {
         let needed = !network.scopedDefault
         removeRoutes(except: needed ? physical : nil)
         guard network.vpnHoldsDefault && !network.physicalScoped else { return }
-        // После моргания линка или перезапуска VPN ждём host-маршрут к серверу: VPN без него (Network Extension)
-        // в наших маршрутах не нуждается, но на всякий случай — не дольше `vpnRouteWait`.
-        if let since = waitingForVPNRoute {
-            guard Date().timeIntervalSince(since) >= vpnRouteWait else {
-                scheduleTick(after: vpnRouteWait - Date().timeIntervalSince(since) + 0.1)
-                return
-            }
-            log.notice("VPN не вернул host-маршрут за \(Int(self.vpnRouteWait)) с — ставлю маршруты без него")
-            waitingForVPNRoute = nil
+        // После моргания линка, сна или перезапуска VPN ждём, пока туннель заработает (`Hold`).
+        if holdBlocks() {
+            scheduleHoldCheck()
+            return
         }
         addRoutes(physical)
     }
@@ -490,11 +682,20 @@ final class Guardian: @unchecked Sendable {
     private func removeRoutes(except keep: String?, journal: Bool = true) {
         let stale = network.splitRoutes.filter { $0.ours && $0.interface != keep }
         guard !stale.isEmpty else { return }
-        for route in stale {
-            Self.run("/sbin/route", ["-n", "delete", "-ifscope", route.interface, "-net", route.destination])
-        }
-        network = NetworkState.current()
+        // Сначала половина, в которой сервер VPN: клон host-маршрута к нему берётся от неё.
+        let upperFirst = vpnHostRoutes.contains { $0 >> 31 == 1 }
+        for route in stale.sorted(by: { $0.upper == upperFirst && $1.upper != upperFirst }) { delete(route) }
+        // Без нового снимка сети: он стоит десятки миллисекунд, а следующая сверка всё равно прочитает таблицу.
+        network.splitRoutes.removeAll { $0.ours && $0.interface != keep }
         did(.routesRemoved(interfaces: Set(stale.map(\.interface)).sorted()), journal: journal)
+    }
+
+    /// Запросом в routing socket; не вышло (кроме «маршрута и так нет») — прежним `route delete`.
+    private func delete(_ route: SplitRoute) {
+        guard let error = RouteSocket.deleteScoped(destination: route.upper ? 0x8000_0000 : 0, prefix: 1,
+                                                   interface: route.interface), error != ESRCH, error != ENXIO else { return }
+        log.error("routing socket delete \(route.destination, privacy: .public) \(route.interface, privacy: .public): \(String(cString: strerror(error)), privacy: .public) — /sbin/route")
+        Self.run("/sbin/route", ["-n", "delete", "-ifscope", route.interface, "-net", route.destination])
     }
 
     // MARK: - pf

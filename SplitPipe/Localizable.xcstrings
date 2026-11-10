@@ -1200,6 +1200,54 @@
         }
       }
     },
+    "VPN снял маршрут к серверу через %@ — маршруты сняты до его переподключения": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The VPN removed the route to its server through %@ — routes removed until it reconnects"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "VPN снял маршрут к серверу через %@ — маршруты сняты до его переподключения"
+          }
+        }
+      }
+    },
+    "VPN %@ не пропускает трафик — переподключите VPN": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "VPN %@ passes no traffic — reconnect the VPN"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "VPN %@ не пропускает трафик — переподключите VPN"
+          }
+        }
+      }
+    },
+    "Система засыпает — маршруты сняты до пробуждения": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The system is going to sleep — routes removed until wake"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Система засыпает — маршруты сняты до пробуждения"
+          }
+        }
+      }
+    },
     "Wi-Fi %@: %@ — маршруты сняты, вернутся свежими": {
       "localizations": {
         "en": {

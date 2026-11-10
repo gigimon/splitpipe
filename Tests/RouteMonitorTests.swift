@@ -77,6 +77,25 @@ final class RouteMonitorTests: XCTestCase {
         else { return XCTFail("cloned route must be ignored") }
     }
 
+    /// Маршрут через уже удалённый интерфейс: имени по индексу нет, оно берётся из таблицы монитора.
+    func testRouteThroughDetachedInterface() {
+        var h = rt_msghdr()
+        h.rtm_version = UInt8(RTM_VERSION)
+        h.rtm_type = UInt8(RTM_DELETE)
+        h.rtm_index = 60000
+        h.rtm_flags = RTF_UP | RTF_STATIC
+        h.rtm_addrs = (1 << RTAX_DST) | (1 << RTAX_NETMASK)
+        let body = sockaddrIn(0, 0, 0, 0) + sockaddrIn(128, 0, 0, 0)
+        h.rtm_msglen = UInt16(MemoryLayout<rt_msghdr>.size + body.count)
+        let bytes = withUnsafeBytes(of: h) { Array($0) } + body
+        guard case .ignored = parse(bytes) else { return XCTFail("unknown index must be ignored") }
+        monitor.names[60000] = "utun9"
+        guard case .route(let change) = parse(bytes) else { return XCTFail("expected route") }
+        XCTAssertEqual(change.route.interface, "utun9")
+        XCTAssertEqual(change.type, RTM_DELETE)
+        XCTAssertTrue(change.isDefault)
+    }
+
     func testNarrowRouteAndFailedRequestIgnored() {
         let net24 = [sockaddrIn(10, 0, 0, 0), sockaddrIn(10, 0, 0, 1), sockaddrIn(255, 255, 255, 0)]
         guard case .ignored = parse(routeMessage(type: RTM_ADD, flags: RTF_UP | RTF_GATEWAY | RTF_STATIC, addrs: net24))

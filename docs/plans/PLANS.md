@@ -58,6 +58,13 @@ Background: [architecture](../architecture.md), [development notes](../developme
 - [x] P2: flap grace, config delivery revisions, status polling, helper timeouts, pf token.
 - [~] P3: test target, one `RouteResolver`, team id cleanup, dead code.
 
+## Code review 5 (network, reconnect after sleep) — [plan](2026-11-10-review-5-network-reconnect.md)
+
+- [x] Fast route removal through the routing socket, pf dump off the helper queue, routes of a destroyed utun.
+- [~] Dead tunnel watchdog (helper side; no app notification yet).
+- [x] Heartbeat by uptime, hold until tunnel traffic, bounded debounce, sleep and wake events.
+- [ ] Other findings (extension debounce, VPN client rule match, UDP relay) and live verification.
+
 ## Feature pack 2026-10-23 — [plan](2026-10-23-feature-pack.md)
 
 - [x] **Event history**: helper, extension and app each keep a journal of events (codes); the app merges them into

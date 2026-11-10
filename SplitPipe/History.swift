@@ -83,6 +83,12 @@ extension AppModel {
                 String(localized: "VPN \(iface) снял маршрут по умолчанию — маршруты сняты до его переподключения")
             case .wifi(let iface, let what):
                 String(localized: "Wi-Fi \(iface): \(what) — маршруты сняты, вернутся свежими")
+            case .vpnHostRouteGone(let iface):
+                String(localized: "VPN снял маршрут к серверу через \(iface) — маршруты сняты до его переподключения")
+            case .tunnelStalled(let iface):
+                String(localized: "VPN \(iface) не пропускает трафик — переподключите VPN")
+            case .sleep:
+                String(localized: "Система засыпает — маршруты сняты до пробуждения")
             }
             return (title, nil)
         case .enabled(let on):

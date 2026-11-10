@@ -39,7 +39,10 @@ final class RouteMonitor {
     private var source: DispatchSourceRead?
     private var buffer = [UInt8](repeating: 0, count: 8192)
     /// Имя по индексу из прошлых сообщений: у удалённого интерфейса `if_indextoname` уже ничего не вернёт.
-    private var names: [UInt32: String] = [:]
+    /// Не `private` — для тестов.
+    var names: [UInt32: String] = [:]
+    /// Удалённые интерфейсы: ядро снимает их маршруты (`RTM_DELETE`), когда имени по индексу уже нет.
+    private var gone: [UInt32: String] = [:]
     /// Вызывается на очереди монитора: `change` — важный маршрут, nil — поменялись адреса или состояние интерфейсов.
     var onEvent: ((Change?) -> Void)?
     /// Интерфейсу назначен IPv4-адрес (`RTM_NEWADDR`), в том числе прежний: после сна и при роуминге Wi-Fi DHCP
@@ -121,9 +124,14 @@ final class RouteMonitor {
                 return .link(Link(interface: name, up: up, detached: false))
             }
             guard let name = names.removeValue(forKey: index) else { return .interfaces }
+            gone[index] = name
             return .link(Link(interface: name, up: false, detached: true))
         case RTM_ADD, RTM_DELETE, RTM_CHANGE:
-            guard let m = RouteMessage(raw), m.rtmErrno == 0, let route = m.ipv4Route,
+            guard var m = RouteMessage(raw) else { return .ignored }
+            // VPN-клиент уже удалил utun: маршрут через него без имени потерялся бы, а это и есть «VPN снял маршрут
+            // по умолчанию».
+            if m.interface == nil { m.interface = names[m.index] ?? gone[m.index] }
+            guard m.rtmErrno == 0, let route = m.ipv4Route,
                   m.flags & (RTF_WASCLONED | RTF_LLINFO) == 0 else { return .ignored }
             let viaGateway = route.prefix == 32 && m.flags & RTF_GATEWAY != 0 && m.flags & RTF_STATIC != 0
             guard route.prefix <= 1 || viaGateway else { return .ignored }
@@ -135,6 +143,7 @@ final class RouteMonitor {
 
     private func remember(_ index: UInt32, _ name: String) {
         names[index] = name
+        gone[index] = nil
     }
 
     /// Интерфейс из `RTM_NEWADDR` / `RTM_DELADDR`, если адрес IPv4 (`RTA_IFA`); IPv6 (временные адреса) не нужен.
