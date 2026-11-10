@@ -58,6 +58,13 @@ Background: [architecture](../architecture.md), [development notes](../developme
 - [x] P2: flap grace, config delivery revisions, status polling, helper timeouts, pf token.
 - [~] P3: test target, one `RouteResolver`, team id cleanup, dead code.
 
+## Code review 4 (security) — [plan](2026-11-06-review-4-security.md)
+
+- [ ] Cheap hardening: probe request, stats bucket, relay after `stopProxy`.
+- [ ] Routing leaks: TCP port 53, UDP per-datagram checks.
+- [ ] Fail-open decisions: helper fallback, missing config, relay cap.
+- [ ] Documentation and hygiene: identity trade-off, VPN client match, audit token.
+
 ## Code review 5 (network, reconnect after sleep) — [plan](2026-11-10-review-5-network-reconnect.md)
 
 - [x] Fast route removal through the routing socket, pf dump off the helper queue, routes of a destroyed utun.
