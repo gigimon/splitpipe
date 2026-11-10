@@ -605,7 +605,8 @@ final class TransparentProxyProvider: NETransparentProxyProvider, NEAppProxyUDPF
     /// примерно за секунду, и «Напрямую» на это время становится недоступен.
     private static let flapGrace: TimeInterval = 2
 
-    /// Обрывает соединения, у которых поменялось правило или интерфейс маршрута: приложение переподключится по новому.
+    /// Обрывает соединения, у которых поменялось правило (если так настроено) или интерфейс маршрута: приложение
+    /// переподключится по новому.
     /// Решения считаются без `lock`: при сотнях соединений и смене сети это заняло бы `handleNewFlow`.
     /// Пропажу привязки к интерфейсу пережидаем `flapGrace` (REVIEW3, 5): вернулась прежней — соединение живёт.
     /// Соединения по системному маршруту обрываются сразу: иначе открытые через en1, пока VPN переподключался,
@@ -616,17 +617,20 @@ final class TransparentProxyProvider: NETransparentProxyProvider, NEAppProxyUDPF
         let cfg = config
         let net = network
         let lists = ipLists
-        let snapshot = cfg.abortOnChange ? relays : [:]
+        let snapshot = relays
         lock.unlock()
         let now = Date()
         var staleIDs: [ObjectIdentifier] = []
         /// Новое `staleSince`: дата — привязка пропала, nil — вернулась.
         var marks: [ObjectIdentifier: Date?] = [:]
         for (id, active) in snapshot {
-            guard let rule = currentRule(active, config: cfg, lists: lists), rule == active.rule else {
+            // Настройка «обрывать при смене правила» — только про правила: соединение, чей интерфейс сменился (VPN
+            // вернулся, utun пересоздан), обрывается всегда — иначе оно живёт мимо kill switch или висит до таймаута.
+            if currentRule(active, config: cfg, lists: lists) != active.rule, cfg.abortOnChange {
                 staleIDs.append(id)
                 continue
             }
+            let rule = active.rule
             if decide(rule, config: cfg, network: net, allowPending: true).binding == active.binding {
                 if active.staleSince != nil { marks[id] = .some(nil) }
             } else if !Decision.isInterface(active.binding) {

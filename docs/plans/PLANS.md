@@ -72,6 +72,12 @@ Background: [architecture](../architecture.md), [development notes](../developme
 - [x] Heartbeat by uptime, hold until tunnel traffic, bounded debounce, sleep and wake events.
 - [ ] Other findings (extension debounce, VPN client rule match, UDP relay) and live verification.
 
+## Code review 6 (extension) — [plan](2026-11-10-review-6-extension.md)
+
+- [x] One UDP socket per flow, network aborts independent of the rule-change setting, `TCP_NODELAY` on relays.
+- [ ] "Direct" fallback during the helper's hold, dead VPN signal for the extension.
+- [ ] Medium and minor findings (statistics writes, record vs actual route, snapshot cost) and live verification.
+
 ## Feature pack 2026-10-23 — [plan](2026-10-23-feature-pack.md)
 
 - [x] **Event history**: helper, extension and app each keep a journal of events (codes); the app merges them into

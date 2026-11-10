@@ -140,6 +140,7 @@ targets:
       - path: SplitPipe/EventLog.swift
       - path: SplitPipe/URLCommand.swift
       - path: SplitPipe/TemporaryRouteTypes.swift
+      - path: SplitPipeProxy/UDPSockets.swift
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: dev.splitpipe.tests

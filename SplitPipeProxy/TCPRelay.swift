@@ -26,6 +26,9 @@ final class TCPRelay: Relay {
         let tcp = NWProtocolTCP.Options()
         tcp.enableKeepalive = true
         tcp.keepaliveIdle = 60
+        // `TCP_NODELAY` приложения к нашему сокету тоже не переходит, а данные из flow приходят уже теми кусками,
+        // какими приложение их писало: с алгоритмом Нейгла мелкие записи (SSH, игры, RPC) ждали бы подтверждения.
+        tcp.noDelay = true
         let params = NWParameters(tls: nil, tcp: tcp)
         if let interface, !isDNS(flow.remoteFlowEndpoint) { params.requiredInterface = interface }
         params.preferNoProxies = true
