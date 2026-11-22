@@ -87,6 +87,16 @@ struct NetworkState: Codable, Hashable {
 
     func vpnKey(forTunnel name: String) -> String { vpns[name]?.key ?? name }
 
+    /// Опознание VPN из снимка расширения: у него root, и владельцев utun видит только оно. Берём для utun,
+    /// которые сами не опознали или опознали лишь эвристикой по процессам, если интерфейс тот же (имя и индекс).
+    mutating func adoptVPNs(from other: NetworkState) {
+        for tunnel in tunnels where vpns[tunnel] == nil || vpns[tunnel]?.source == .process {
+            guard let info = other.vpns[tunnel], info.source != .process,
+                  other.index(of: tunnel) == index(of: tunnel) else { continue }
+            vpns[tunnel] = info
+        }
+    }
+
     /// Индекс интерфейса из снимка; нет в снимке — из ядра сейчас.
     func index(of name: String) -> UInt32 { indexes?[name] ?? if_nametoindex(name) }
 

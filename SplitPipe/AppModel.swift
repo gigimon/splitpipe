@@ -43,7 +43,10 @@ final class AppModel: ObservableObject {
     /// Раздел, на который нужно переключить окно (кнопки «Исправить» в диагностике).
     @Published var requestedSection: SidebarSection?
     @Published var diagnosticsRunning = false
-    @Published var providerStatus: ProviderStatus?
+    @Published var providerStatus: ProviderStatus? {
+        // Расширение опознало VPN иначе (у него root): ключи маршрутов на экране должны быть его.
+        didSet { if providerStatus?.network?.vpns != oldValue?.network?.vpns { scheduleRouteRefresh() } }
+    }
     /// Запасные сервисы проверки по порядку, если Cloudflare trace по IP не ответил.
     @Published var echoURLs: [String]
     /// Держать у расширения соединения всех приложений, а не только с правилами: тогда любое приложение переключается сразу.
@@ -388,7 +391,11 @@ final class AppModel: ObservableObject {
     func refreshRoutes() {
         interfaces = SystemTools.interfaces()
         let known = Set(rules.values.flatMap { [$0.route, Fallback.altRoute($0.fallback) ?? ""] })
-        let found = RouteDiscovery.discover(names: routeNames, known: known)
+        let found = RouteDiscovery.discover(names: routeNames, known: known, extension: providerStatus?.network)
+        if migrateInterfaceRoutes(found.network) {
+            saveRulesAndPush()
+            return
+        }
         routes = found.routes
         let previousDefault = defaultInterface
         defaultInterface = found.network.defaultInterface
@@ -403,6 +410,35 @@ final class AppModel: ObservableObject {
         checkChangedRoutes()
         checkTemporaryRoutes()
         updateVPNNotifications()
+    }
+
+    /// Правила на неопознанный VPN хранят имя интерфейса (`vpn:utun4`). Когда тот же utun опознан надёжно (служба
+    /// в настройках сети или владелец сокета), правило переводится на стабильный ключ: трафик идёт туда же, куда
+    /// и шёл, но после переподключения под другим номером правило не теряется. true — что-то перевели.
+    private func migrateInterfaceRoutes(_ network: NetworkState) -> Bool {
+        var moves: [String: String] = [:]
+        for t in network.tunnels {
+            guard let info = network.vpns[t], info.source != .process else { continue }
+            moves[RouteID.vpn(t)] = RouteID.vpn(info.key)
+        }
+        func moveRoute(_ id: String) -> String { moves[id] ?? id }
+        func moveRule(_ rule: AppRule) -> AppRule {
+            AppRule(route: moveRoute(rule.route),
+                    fallback: Fallback.altRoute(rule.fallback).map { Fallback.alt(moveRoute($0)) } ?? rule.fallback)
+        }
+        let newRules = rules.mapValues(moveRule)
+        let newTemporary = temporaryRoutes.mapValues { t in
+            TemporaryRoute(route: moveRoute(t.route), end: t.end, previous: t.previous.map(moveRule))
+        }
+        guard newRules != rules || newTemporary != temporaryRoutes else { return false }
+        for (from, to) in moves {
+            let (old, new) = (String(from.dropFirst(4)), String(to.dropFirst(4)))
+            if routeNames[new] == nil, let name = routeNames[old] { routeNames[new] = name }
+        }
+        defaults.set(routeNames, forKey: "routeNames")
+        temporaryRoutes = newTemporary
+        rules = newRules
+        return true
     }
 
     func route(_ id: String) -> RouteInfo? { routes.first { $0.id == id } }

@@ -50,8 +50,11 @@ enum RouteDiscovery {
     /// Текущие маршруты: основное физическое подключение и каждый `utun` с IPv4.
     /// `known` — VPN из правил: если их сейчас нет, они показываются отключёнными, а правило не теряется.
     /// Роли превращаются в интерфейсы так же, как в расширении (`NetworkState`), чтобы экран показывал то, что происходит.
-    static func discover(names: [String: String], known: Set<String>) -> (routes: [RouteInfo], network: NetworkState) {
-        let net = NetworkState.current()
+    /// `extension` — как сеть видит расширение: его опознание VPN точнее (`NetworkState.adoptVPNs`).
+    static func discover(names: [String: String], known: Set<String>,
+                         extension ext: NetworkState? = nil) -> (routes: [RouteInfo], network: NetworkState) {
+        var net = NetworkState.current()
+        if let ext { net.adoptVPNs(from: ext) }
         let ifs = SystemTools.interfaces()
         let defaultIf = net.defaultInterface
         let phys = ifs.first { $0.name == net.physical }
@@ -70,7 +73,8 @@ enum RouteDiscovery {
             seen.insert(id)
             routes.append(RouteInfo(
                 id: id, kind: .vpn, name: names[key] ?? net.vpnName(forKey: key),
-                detail: (net.vpns[t.name].map { $0.clientTitle + " · " } ?? "") + t.name,
+                detail: net.vpns[t.name].map { $0.clientTitle + " · " + t.name }
+                    ?? String(localized: "\(t.name) · привязка по номеру интерфейса"),
                 interface: t.name, address: t.address, holdsDefault: t.name == defaultIf,
                 tint: tint(forVPN: key), symbol: "lock.shield"))
         }

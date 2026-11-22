@@ -5,9 +5,10 @@ import SystemConfiguration
 /// Кто держит utun. Ключ стабилен между переподключениями (в отличие от `utunN`) и хранится в правилах как `vpn:<key>`.
 struct VPNInfo: Codable, Hashable {
     enum Source: String, Codable {
-        /// VPN на Network Extension: служба в настройках сети (Outline, WireGuard из App Store).
+        /// VPN на Network Extension: служба в настройках сети (Outline, WireGuard из App Store, любой другой).
         case service
-        /// Процесс, открывший управляющий сокет utun (нужен root — работает в расширении).
+        /// Процесс, открывший управляющий сокет utun (нужен root — работает в расширении). Процесс не из каталога
+        /// даёт ключ `proc:<имя>`.
         case socket
         /// Единственный запущенный известный VPN-процесс без своего utun (так приложение узнаёт Amnezia без root).
         case process
@@ -26,8 +27,9 @@ struct VPNInfo: Codable, Hashable {
     }
 }
 
-/// Опознаём только распространённые клиенты: Amnezia, WireGuard, OpenVPN, Outline. Остальные utun — просто VPN по имени
-/// интерфейса: провайдерских приложений-надстроек слишком много, чтобы вести их список.
+/// По имени знаем только распространённые клиенты: Amnezia, WireGuard, OpenVPN, Outline. Остальным ключ даёт служба
+/// Network Extension (`ne:<id>`) или процесс-владелец utun (`proc:<имя>`); не нашлось ни того, ни другого — ключом
+/// остаётся имя интерфейса `utunN`, и правило держится только до переподключения.
 enum VPNCatalog {
     /// Клиенты без Network Extension: имя процесса → ключ и имя маршрута.
     private static let daemons: [String: (key: String, name: String)] = [
@@ -55,13 +57,20 @@ enum VPNCatalog {
         daemons[process].map { VPNInfo(key: $0.key, name: $0.name, client: process, source: source) }
     }
 
+    /// Процесс не из каталога, открывший utun: ключ по его имени (`p_comm`, до 16 символов).
+    static func info(forUnknownProcess process: String) -> VPNInfo {
+        VPNInfo(key: processPrefix + process, name: process, client: process, source: .socket)
+    }
+
     static let servicePrefix = "ne:"
+    static let processPrefix = "proc:"
 
     /// Имя VPN по ключу, даже если он сейчас отключён: службу Network Extension — из настроек сети.
     static func name(forKey key: String) -> String {
         if key.hasPrefix(servicePrefix) {
             return serviceName(String(key.dropFirst(servicePrefix.count))) ?? "VPN"
         }
+        if key.hasPrefix(processPrefix) { return String(key.dropFirst(processPrefix.count)) }
         if let d = daemons.values.first(where: { $0.key == key }) { return d.name }
         return "VPN \(key)"
     }
@@ -73,17 +82,23 @@ enum VPNCatalog {
 }
 
 enum VPNDetection {
-    /// utun → VPN. Сначала службы Network Extension, потом владелец управляющего сокета (root),
-    /// потом единственный известный VPN-процесс. Остальные utun остаются по имени `utunN`.
+    /// utun → VPN. Сначала службы VPN в настройках сети, потом владелец управляющего сокета (root; не из каталога —
+    /// ключ `proc:<имя>`), потом единственный известный VPN-процесс. Остальные utun остаются по имени `utunN`.
     static func detect(tunnels: [String], defaultInterface: String?,
                        processes: [Int32: String]?) -> [String: VPNInfo] {
         var result = services(tunnels: Set(tunnels))
         var rest = tunnels.filter { result[$0] == nil }
         guard !rest.isEmpty, let processes else { return result }
 
+        var owners: [String: String] = [:]
         for (tunnel, pid) in SocketOwners.shared.owners(of: rest, processes: processes) {
             guard let name = processes[pid] else { continue }
+            owners[tunnel] = name
             result[tunnel] = VPNCatalog.info(forProcess: name, source: .socket)
+        }
+        // Владелец не из каталога — свой ключ по имени процесса: эвристике ниже такой utun не отдаём.
+        for tunnel in rest where result[tunnel] == nil {
+            if let name = owners[tunnel] { result[tunnel] = VPNCatalog.info(forUnknownProcess: name) }
         }
         rest = rest.filter { result[$0] == nil }
 
@@ -110,10 +125,15 @@ enum VPNDetection {
             guard let ipv4 = SCDynamicStoreCopyValue(nil, key as CFString) as? [String: Any],
                   let iface = ipv4["InterfaceName"] as? String, tunnels.contains(iface) else { continue }
             let id = key.components(separatedBy: "/")[3]
-            let setup = SCDynamicStoreCopyValue(nil, "Setup:/Network/Service/\(id)/Interface" as CFString) as? [String: Any]
-            guard let client = setup?["SubType"] as? String, VPNCatalog.services[client] != nil else { continue }
+            // Служба VPN в настройках сети на utun — даже если клиента нет в каталоге: её id стабилен между
+            // переподключениями. Только `State:` без `Setup:` пишут скрипты VPN-демонов, и id там бывает случайным.
+            guard let setup = SCDynamicStoreCopyValue(nil, "Setup:/Network/Service/\(id)/Interface" as CFString) as? [String: Any],
+                  let type = setup["Type"] as? String else { continue }
+            let client = setup["SubType"] as? String ?? type
+            guard VPNCatalog.services[client] != nil || ["VPN", "IPSec"].contains(type) else { continue }
             out[iface] = VPNInfo(key: VPNCatalog.servicePrefix + id,
-                                 name: VPNCatalog.serviceName(id) ?? VPNCatalog.services[client]!, client: client, source: .service)
+                                 name: VPNCatalog.serviceName(id) ?? VPNCatalog.services[client] ?? client,
+                                 client: client, source: .service)
         }
         return out
     }

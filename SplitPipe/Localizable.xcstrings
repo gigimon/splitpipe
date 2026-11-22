@@ -55,6 +55,22 @@
     "%@": {
       "shouldTranslate": false
     },
+    "%@ · привязка по номеру интерфейса": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ · bound by interface number"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ · привязка по номеру интерфейса"
+          }
+        }
+      }
+    },
     "%@ заблокирован": {
       "localizations": {
         "en": {
