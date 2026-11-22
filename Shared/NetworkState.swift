@@ -2,6 +2,14 @@ import Darwin
 import Foundation
 import SystemConfiguration
 
+/// VPN, опознанный на интерфейсе: `utun5#31` → `ne:65FE…` (rdpnd). Индекс — чтобы подсказка не досталась utun,
+/// пересозданному под тем же именем.
+struct TunnelVPN: Codable, Hashable {
+    var interface: String
+    var index: UInt32
+    var vpn: VPNInfo
+}
+
 /// Идентификаторы маршрутов в правилах. VPN хранится по ключу, а не по имени интерфейса: `utunN` меняется после переподключения.
 enum RouteID {
     static let system = "default"
@@ -87,13 +95,21 @@ struct NetworkState: Codable, Hashable {
 
     func vpnKey(forTunnel name: String) -> String { vpns[name]?.key ?? name }
 
-    /// Опознание VPN из снимка расширения: у него root, и владельцев utun видит только оно. Берём для utun,
-    /// которые сами не опознали или опознали лишь эвристикой по процессам, если интерфейс тот же (имя и индекс).
-    mutating func adoptVPNs(from other: NetworkState) {
-        for tunnel in tunnels where vpns[tunnel] == nil || vpns[tunnel]?.source == .process {
-            guard let info = other.vpns[tunnel], info.source != .process,
-                  other.index(of: tunnel) == index(of: tunnel) else { continue }
-            vpns[tunnel] = info
+    /// Надёжно опознанные utun (служба или владелец сокета, не эвристика) — подсказки для других частей SplitPipe.
+    var reliableVPNs: [TunnelVPN] {
+        tunnels.compactMap { t in
+            vpns[t].flatMap { $0.source == .process ? nil : TunnelVPN(interface: t, index: index(of: t), vpn: $0) }
+        }
+    }
+
+    /// Опознание VPN, сделанное в другом месте: владельцев utun видит только помощник (root без песочницы).
+    /// Берём для того же интерфейса (имя и индекс), если сами его не опознали, опознали лишь эвристикой по процессам
+    /// или опознали так же, но без имени клиента.
+    mutating func adoptVPNs(_ hints: [TunnelVPN]) {
+        for hint in hints where tunnels.contains(hint.interface) && index(of: hint.interface) == hint.index {
+            let own = vpns[hint.interface]
+            guard own == nil || own?.source == .process || own?.key == hint.vpn.key else { continue }
+            vpns[hint.interface] = hint.vpn
         }
     }
 

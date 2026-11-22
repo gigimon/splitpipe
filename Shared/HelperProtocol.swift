@@ -30,11 +30,14 @@ struct HelperStatus: Codable, Equatable {
     var anchorEffective: Bool?
     /// Почему не действует, или «pf выключен».
     var pfNote: String?
+    /// Надёжно опознанные VPN: владельцев utun видит только помощник. Приложение пересылает их расширению.
+    /// nil — помощник старой версии.
+    var tunnels: [TunnelVPN]? = nil
 
     /// В JSON — прежний ключ `scopedRoute`: приложение и помощник разных версий понимают друг друга, пока помощник
     /// не перезапустился после обновления.
     private enum CodingKeys: String, CodingKey {
-        case version, enabled, anchorInterfaces, physical, lastAction, lastActionAt, lastError, anchorEffective, pfNote
+        case version, enabled, anchorInterfaces, physical, lastAction, lastActionAt, lastError, anchorEffective, pfNote, tunnels
         case directUsable = "scopedRoute"
     }
 }

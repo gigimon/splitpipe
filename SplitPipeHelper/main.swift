@@ -221,7 +221,8 @@ final class Guardian: @unchecked Sendable {
                                   enabled: enabled, anchorInterfaces: anchorInterfaces, physical: network.physical,
                                   directUsable: network.directMode != .unavailable, lastAction: lastAction?.description,
                                   lastActionAt: lastActionAt, lastError: lastError?.description,
-                                  anchorEffective: anchorEffective, pfNote: pfNote?.description)
+                                  anchorEffective: anchorEffective, pfNote: pfNote?.description,
+                                  tunnels: network.reliableVPNs)
         return HelperEvents.encode(status, HelperEvents(lastActionEvent: lastAction, lastErrorEvent: lastError,
                                                         pfNoteEvent: pfNote))
     }

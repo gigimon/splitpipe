@@ -20,14 +20,14 @@ final class VPNKeysTests: XCTestCase {
     func testAdoptFillsUnidentifiedTunnel() {
         var app = state([:], indexes: ["utun4": 20])
         let ext = state(["utun4": VPNCatalog.info(forUnknownProcess: "tailscaled")], indexes: ["utun4": 20])
-        app.adoptVPNs(from: ext)
+        app.adoptVPNs(ext.reliableVPNs)
         XCTAssertEqual(app.vpnKey(forTunnel: "utun4"), "proc:tailscaled")
     }
 
     func testAdoptSkipsRecreatedInterface() {
         var app = state([:], indexes: ["utun4": 21])
         let ext = state(["utun4": VPNCatalog.info(forUnknownProcess: "tailscaled")], indexes: ["utun4": 20])
-        app.adoptVPNs(from: ext)
+        app.adoptVPNs(ext.reliableVPNs)
         XCTAssertEqual(app.vpnKey(forTunnel: "utun4"), "utun4")
     }
 
@@ -35,15 +35,31 @@ final class VPNKeysTests: XCTestCase {
         let guess = VPNCatalog.info(forProcess: "amneziawg-go", source: .process)!
         var app = state(["utun4": guess], indexes: ["utun4": 20])
         let ext = state(["utun4": VPNCatalog.info(forUnknownProcess: "tailscaled")], indexes: ["utun4": 20])
-        app.adoptVPNs(from: ext)
+        app.adoptVPNs(ext.reliableVPNs)
         XCTAssertEqual(app.vpnKey(forTunnel: "utun4"), "proc:tailscaled")
+    }
+
+    func testAdoptTakesOwnerNameForSameService() {
+        let own = VPNInfo(key: "ne:65FE", name: "VPN", client: VPNCatalog.stateOnlyClient, source: .service)
+        var app = state(["utun5": own], indexes: ["utun5": 31])
+        let named = VPNInfo(key: "ne:65FE", name: "rdpnd", client: "rdpnd", source: .service)
+        app.adoptVPNs([TunnelVPN(interface: "utun5", index: 31, vpn: named)])
+        XCTAssertEqual(app.vpns["utun5"]?.name, "rdpnd")
+    }
+
+    func testReliableVPNsSkipProcessGuess() {
+        let guess = VPNCatalog.info(forProcess: "amneziawg-go", source: .process)!
+        let s = state(["utun4": guess, "utun5": VPNCatalog.info(forUnknownProcess: "rdpnd")],
+                      indexes: ["utun4": 20, "utun5": 31])
+        XCTAssertEqual(s.reliableVPNs.map(\.interface), ["utun5"])
+        XCTAssertEqual(s.reliableVPNs.first?.index, 31)
     }
 
     func testAdoptKeepsOwnReliableDetection() {
         let own = VPNInfo(key: "ne:ABC", name: "Work", client: "com.example.vpn", source: .service)
         var app = state(["utun4": own], indexes: ["utun4": 20])
         let ext = state(["utun4": VPNCatalog.info(forUnknownProcess: "other")], indexes: ["utun4": 20])
-        app.adoptVPNs(from: ext)
+        app.adoptVPNs(ext.reliableVPNs)
         XCTAssertEqual(app.vpnKey(forTunnel: "utun4"), "ne:ABC")
     }
 }

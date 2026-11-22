@@ -143,6 +143,11 @@ final class AppModel: ObservableObject {
     var flowScope: StatusParts.Flows = .none
     /// Действует ли pf-правило помощника на прошлом опросе: изменилось — перепроверить kill switch.
     var lastAnchorEffective: Bool?
+    /// utun на прошлом обновлении маршрутов (`utun5#31`): сменились — помощника спрашиваем о владельцах сразу.
+    private var lastTunnelBindings: Set<String> = []
+    /// Подсказки помощника, последними доставленные расширению и учтённые в маршрутах.
+    private var sentTunnels: [TunnelVPN]?
+    private var shownTunnels: [TunnelVPN]?
     private var helperChanges: AnyCancellable?
     private var proxyChanges: AnyCancellable?
     private var proxyConnected: AnyCancellable?
@@ -285,6 +290,7 @@ final class AppModel: ObservableObject {
             while !Task.isCancelled {
                 try? await Task.sleep(for: .seconds(10))
                 await helper.refresh()
+                await syncTunnels()
                 // Помощника могли разрешить или перезапустить уже после запуска приложения — досылаем состояние.
                 if let status = helper.status, status.enabled != bypassWanted { await helper.setEnabled(bypassWanted) }
                 // Действует ли pf-правило — основной сигнал kill switch: изменилось — перепроверяем «Напрямую».
@@ -391,10 +397,22 @@ final class AppModel: ObservableObject {
     func refreshRoutes() {
         interfaces = SystemTools.interfaces()
         let known = Set(rules.values.flatMap { [$0.route, Fallback.altRoute($0.fallback) ?? ""] })
-        let found = RouteDiscovery.discover(names: routeNames, known: known, extension: providerStatus?.network)
+        // Помощник — последним: только он видит владельцев utun, его имя клиента точнее.
+        let hints = (providerStatus?.network?.reliableVPNs ?? []) + (helper.status?.tunnels ?? [])
+        let found = RouteDiscovery.discover(names: routeNames, known: known, hints: hints)
         if migrateInterfaceRoutes(found.network) {
             saveRulesAndPush()
             return
+        }
+        let bindings = Set(found.network.tunnels.map(found.network.binding))
+        if bindings != lastTunnelBindings {
+            lastTunnelBindings = bindings
+            // Помощник сверяется с сетью за ~2 с после смены маршрутов: потом спрашиваем, чьи это utun.
+            Task {
+                try? await Task.sleep(for: .seconds(3))
+                await helper.refresh()
+                await syncTunnels()
+            }
         }
         routes = found.routes
         let previousDefault = defaultInterface
@@ -410,6 +428,19 @@ final class AppModel: ObservableObject {
         checkChangedRoutes()
         checkTemporaryRoutes()
         updateVPNNotifications()
+    }
+
+    /// Владельцы utun от помощника — расширению: в песочнице оно их не видит, а без них правила на VPN с ключом
+    /// `proc:` уходили бы в fallback. Шлём при каждой сверке: расширение могло перезапуститься и забыть их.
+    func syncTunnels() async {
+        guard let tunnels = helper.status?.tunnels else { return }
+        if !tunnels.isEmpty || sentTunnels != tunnels, case .ok? = await proxy.send(.setTunnels(tunnels)) {
+            sentTunnels = tunnels
+        }
+        if tunnels != shownTunnels {
+            shownTunnels = tunnels
+            refreshRoutes()
+        }
     }
 
     /// Правила на неопознанный VPN хранят имя интерфейса (`vpn:utun4`). Когда тот же utun опознан надёжно (служба

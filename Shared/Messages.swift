@@ -170,6 +170,9 @@ enum ProviderRequest: Codable {
     case events(after: UInt64, journal: String?)
     /// Подсети списков: добавить или заменить эти (остальные остаются, пока на них ссылается `ProviderConfig.lists`).
     case setLists([CompiledIPList])
+    /// VPN, опознанные помощником: в песочнице расширение владельцев utun не видит. Не в `ProviderConfig` —
+    /// та сохраняется в настройках системы, а подсказки меняются с каждым переподключением VPN.
+    case setTunnels([TunnelVPN])
 }
 
 struct StatusParts: Codable, Hashable {

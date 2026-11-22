@@ -50,11 +50,12 @@ enum RouteDiscovery {
     /// Текущие маршруты: основное физическое подключение и каждый `utun` с IPv4.
     /// `known` — VPN из правил: если их сейчас нет, они показываются отключёнными, а правило не теряется.
     /// Роли превращаются в интерфейсы так же, как в расширении (`NetworkState`), чтобы экран показывал то, что происходит.
-    /// `extension` — как сеть видит расширение: его опознание VPN точнее (`NetworkState.adoptVPNs`).
+    /// `hints` — VPN, опознанные помощником и расширением (`NetworkState.adoptVPNs`): владельцев utun приложение
+    /// само не видит.
     static func discover(names: [String: String], known: Set<String>,
-                         extension ext: NetworkState? = nil) -> (routes: [RouteInfo], network: NetworkState) {
+                         hints: [TunnelVPN] = []) -> (routes: [RouteInfo], network: NetworkState) {
         var net = NetworkState.current()
-        if let ext { net.adoptVPNs(from: ext) }
+        net.adoptVPNs(hints)
         let ifs = SystemTools.interfaces()
         let defaultIf = net.defaultInterface
         let phys = ifs.first { $0.name == net.physical }

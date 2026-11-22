@@ -135,6 +135,9 @@ final class TransparentProxyProvider: NETransparentProxyProvider, NEAppProxyUDPF
     private let owners = OwnerResolver()
     /// Сеть, по которой роли маршрутов превращаются в интерфейсы. Обновляется само, даже если приложение закрыто.
     private var network = NetworkState()
+    /// VPN, опознанные помощником (присылает приложение): владельцев utun в песочнице не видно. Только в памяти —
+    /// после перезапуска расширения приложение пришлёт их на следующей сверке.
+    private var tunnelHints: [TunnelVPN] = []
     private let networkQueue = DispatchQueue(label: "dev.splitpipe.network")
     private var networkTimer: DispatchSourceTimer?
     private var networkWork: DispatchWorkItem?
@@ -563,6 +566,7 @@ final class TransparentProxyProvider: NETransparentProxyProvider, NEAppProxyUDPF
             return
         }
         lock.lock()
+        state.adoptVPNs(tunnelHints)
         // Список процессов на мгновение не виден — VPN без Network Extension не опознать: прежнее опознание
         // туннеля, который никуда не делся, лучше, чем увести его правила в fallback (REVIEW3, 4.6).
         if !state.processesVisible {
@@ -708,6 +712,16 @@ final class TransparentProxyProvider: NETransparentProxyProvider, NEAppProxyUDPF
             let aborted = reevaluate()
             logger.notice("ip lists updated: \(lists.map(\.id).joined(separator: ","), privacy: .public), aborted \(aborted) flows")
             if aborted > 0 { events.add(.flowsAborted(count: aborted, network: false)) }
+            reply(.ok)
+        case .setTunnels(let tunnels):
+            lock.lock()
+            let changed = tunnels != tunnelHints
+            tunnelHints = tunnels
+            lock.unlock()
+            if changed {
+                logger.notice("tunnel hints: \(tunnels.map { "\($0.interface):\($0.vpn.key)" }.joined(separator: ","), privacy: .public)")
+                networkQueue.async { [self] in refreshNetwork(force: false) }
+            }
             reply(.ok)
         case .events(let after, let journal):
             reply(.events(events.batch(after: after, journal: journal)))
